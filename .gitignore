@@ -1,0 +1,132 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyTorch models and data
+*.pth
+*.pt
+
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Database - exclude general db files but allow specific ones
+*.sqlite
+*.sqlite3
+# Allow hifazat.db to be tracked
+!hifazat.db
+
+# Logs - exclude log files but allow log directories with .gitkeep
+*.log
+# Exclude log files in logs directories but allow the directories themselves
+logs/*.log
+logs/**/*.log
+
+# Media files - exclude actual media but allow directory structure
+# Exclude media files but allow directories with .gitkeep
+media/**/*.mp4
+media/**/*.avi
+media/**/*.mov
+media/**/*.jpg
+media/**/*.jpeg
+media/**/*.png
+media/**/*.gif
+media/**/*.pdf
+media/**/*.doc
+media/**/*.docx
+media/**/*.wav
+media/**/*.mp3
+media/**/*.flac
+# Allow .gitkeep files in media directories
+!media/**/.gitkeep
+snapshots/
+videos/*.mp4
+videos/*.avi
+videos/*.mov
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/

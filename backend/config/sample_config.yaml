@@ -1,0 +1,52 @@
+api:
+  base_url: http://localhost:8000
+  timeout: 30
+logging:
+  file: logs/hifazat.log
+  level: INFO
+pipelines:
+  border_anomaly:
+    confidence_threshold: 0.5
+    enabled: true
+    feature_weights:
+      curvature: 0.2
+      direction_change: 0.2
+      speed: 0.3
+    min_trajectory_length: 10
+    processing_interval: 1.0
+    sensitivity: 0.7
+  threat_intelligence:
+    confidence_threshold: 0.7
+    enabled: true
+    feed_sources:
+    - https://example.com/threat_feed.json
+    - /path/to/local/feed.csv
+    model_path: models/threat_classifier
+    processing_interval: 5.0
+    risk_thresholds:
+      high: 0.8
+      low: 0.2
+      medium: 0.5
+  video_surveillance:
+    behavior_rules:
+      loitering:
+        enabled: true
+        threshold_seconds: 30
+      zone_violation:
+        enabled: true
+        zones: []
+    confidence_threshold: 0.6
+    detection_classes:
+    - person
+    - car
+    - truck
+    enabled: true
+    input_sources:
+    - /path/to/video.mp4
+    - rtsp://camera1.local/stream
+    model_path: models/yolov8n.pt
+    processing_interval: 0.1
+storage:
+  data_path: data
+  media_path: media
+  models_path: models

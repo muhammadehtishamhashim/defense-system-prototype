@@ -75,15 +75,15 @@
     - Create end-to-end tests for video analysis workflow
     - _Requirements: 2.7_
 
-- [ ] 5. Develop Border Anomaly Detection Pipeline
-  - [ ] 5.1 Implement trajectory extraction and analysis
+- [x] 5. Develop Border Anomaly Detection Pipeline
+  - [x] 5.1 Implement trajectory extraction and analysis
     - Create trajectory extraction from object tracking data
     - Implement feature computation (speed, curvature, duration)
     - Add trajectory visualization and debugging tools
     - Write unit tests for trajectory processing
     - _Requirements: 3.1, 3.2_
 
-  - [ ] 5.2 Build anomaly detection model
+  - [x] 5.2 Build anomaly detection model
     - Implement Isolation Forest anomaly detector
     - Create autoencoder-based anomaly detection as alternative
     - Add motion-based fallback detection system
@@ -91,7 +91,7 @@
     - Write tests with synthetic anomaly data
     - _Requirements: 3.3, 3.5, 3.6_
 
-  - [ ] 5.3 Integrate anomaly pipeline with Alert Broker
+  - [x] 5.3 Integrate anomaly pipeline with Alert Broker
     - Create anomaly detection service with configurable sensitivity
     - Implement alert generation with supporting frames
     - Add configuration for anomaly thresholds and parameters

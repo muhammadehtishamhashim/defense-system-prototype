@@ -26,23 +26,29 @@ logger = get_pipeline_logger("video_surveillance")
 class ObjectDetector:
     """YOLOv8-based object detection for video surveillance"""
 
-    def __init__(self, model_path: str = "models/yolov8n.pt", confidence_threshold: float = 0.5):
+    def __init__(self, model_path: str = "yolov8n.pt", confidence_threshold: float = 0.5):
         """
         Initialize YOLOv8 object detector
 
         Args:
-            model_path: Path to YOLOv8 model weights
+            model_path: Path to YOLOv8 model weights (will download if not exists)
             confidence_threshold: Detection confidence threshold
         """
         self.model_path = model_path
         self.confidence_threshold = confidence_threshold
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # Force CPU usage for better compatibility with limited hardware
+        self.device = 'cpu'
 
         try:
+            # Use YOLOv8n (nano) model - smallest and fastest for CPU
             self.model = YOLO(model_path)
+            # Optimize for CPU inference
             self.model.to(self.device)
+            # Set model to evaluation mode for better performance
+            if hasattr(self.model.model, 'eval'):
+                self.model.model.eval()
             self.class_names = self.model.names
-            logger.info(f"YOLOv8 model loaded successfully on {self.device}")
+            logger.info(f"YOLOv8 nano model loaded successfully on {self.device} (optimized for CPU)")
         except Exception as e:
             logger.error(f"Failed to load YOLOv8 model: {str(e)}")
             self.model = None
@@ -63,8 +69,10 @@ class ObjectDetector:
             return []
 
         try:
-            # Run YOLOv8 inference
-            results = self.model(frame, conf=self.confidence_threshold, verbose=False)
+            # Run YOLOv8 inference with CPU optimizations
+            # Use smaller image size for faster processing on CPU
+            results = self.model(frame, conf=self.confidence_threshold, verbose=False, 
+                               imgsz=416, device='cpu')  # Smaller input size for CPU
 
             detections = []
             for result in results:
@@ -295,7 +303,7 @@ class VideoProcessor:
             # Draw class name and confidence
             class_name = obj['class_name']
             confidence = obj['confidence']
-            label = f"{class_name} {confidence".2f"}"
+            label = f"{class_name} {confidence:.2f}"
             cv2.putText(display_frame, label,
                        (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 

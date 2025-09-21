@@ -96,7 +96,7 @@ async def create_threat_alert(
             "timestamp": alert.timestamp,
             "confidence": alert.confidence,
             "status": alert.status.value,
-            "data": alert.dict()
+            "data": alert.model_dump(mode='json')  # Use model_dump with json mode for proper serialization
         }
         
         # Create alert in database
@@ -136,7 +136,7 @@ async def create_video_alert(
             "timestamp": alert.timestamp,
             "confidence": alert.confidence,
             "status": alert.status.value,
-            "data": alert.dict()
+            "data": alert.model_dump(mode='json')  # Use model_dump with json mode for proper serialization
         }
         
         # Create alert in database
@@ -176,7 +176,7 @@ async def create_anomaly_alert(
             "timestamp": alert.timestamp,
             "confidence": alert.confidence,
             "status": alert.status.value,
-            "data": alert.dict()
+            "data": alert.model_dump(mode='json')  # Use model_dump with json mode for proper serialization
         }
         
         # Create alert in database

@@ -28,15 +28,15 @@
     - Write unit tests for utility functions
     - _Requirements: 6.4, 7.3_
 
-- [ ] 3. Develop Threat Intelligence Pipeline
-  - [ ] 3.1 Implement IOC extraction and parsing
+- [x] 3. Develop Threat Intelligence Pipeline
+  - [x] 3.1 Implement IOC extraction and parsing
     - Create feed ingestion module for JSON/CSV/XML formats
     - Implement regex patterns and spaCy NER for IOC extraction
     - Create IOC validation and normalization functions
     - Write unit tests with sample threat intelligence data
     - _Requirements: 1.1, 1.3_
 
-  - [ ] 3.2 Build threat classification model
+  - [x] 3.2 Build threat classification model
     - Implement DistilBERT-based classifier with TF-IDF features
     - Create training pipeline with synthetic threat data
     - Implement risk scoring algorithm (High/Medium/Low)
@@ -44,15 +44,15 @@
     - Write tests for classification accuracy
     - _Requirements: 1.1, 1.2, 8.2_
 
-  - [ ] 3.3 Integrate threat pipeline with Alert Broker
+  - [x] 3.3 Integrate threat pipeline with Alert Broker
     - Create threat pipeline service that processes feeds continuously
     - Implement alert generation and API communication
     - Add configuration for feed sources and thresholds
     - Create end-to-end tests for threat detection workflow
     - _Requirements: 1.4, 1.5_
 
-- [ ] 4. Develop Video Surveillance Pipeline
-  - [ ] 4.1 Implement object detection and tracking
+- [x] 4. Develop Video Surveillance Pipeline
+  - [x] 4.1 Implement object detection and tracking
     - Set up YOLOv8 model loading and inference
     - Implement DeepSORT tracking for multi-object tracking
     - Create video frame processing pipeline
@@ -60,7 +60,7 @@
     - Write tests with sample video data
     - _Requirements: 2.1, 2.2, 2.6_
 
-  - [ ] 4.2 Build behavior analysis engine
+  - [x] 4.2 Build behavior analysis engine
     - Implement loitering detection using track persistence
     - Create zone violation detection with configurable areas
     - Add abandoned object detection logic
@@ -68,7 +68,7 @@
     - Write tests for each behavior detection rule
     - _Requirements: 2.3, 2.4, 2.5, 2.6_
 
-  - [ ] 4.3 Integrate video pipeline with Alert Broker
+  - [x] 4.3 Integrate video pipeline with Alert Broker
     - Create video processing service with real-time capabilities
     - Implement snapshot storage and retrieval
     - Add configuration for detection thresholds and zones

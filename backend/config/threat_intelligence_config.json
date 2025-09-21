@@ -1,0 +1,33 @@
+{
+  "threat_intelligence": {
+    "confidence_threshold": 0.7,
+    "processing_interval": 5.0,
+    "risk_threshold": 0.8,
+    "feed_check_interval": 300,
+    "batch_size": 100,
+    "feed_sources": [
+      {
+        "name": "sample_json_feed",
+        "type": "file",
+        "path": "backend/pipelines/threat_intelligence/sample_data.py",
+        "format": "json",
+        "enabled": true
+      },
+      {
+        "name": "sample_csv_feed",
+        "type": "file",
+        "path": "backend/pipelines/threat_intelligence/sample_data.py",
+        "format": "csv",
+        "enabled": true
+      }
+    ],
+    "model_config": {
+      "model_dir": "models/threat_classifier",
+      "load_pretrained": true,
+      "train_on_startup": false
+    },
+    "api_base_url": "http://localhost:8000",
+    "enable_async_processing": true,
+    "max_concurrent_feeds": 5
+  }
+}

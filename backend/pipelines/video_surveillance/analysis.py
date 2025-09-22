@@ -374,22 +374,27 @@ class VideoAnalysisPipeline:
         detector_config = detector_config or {}
         analyzer_config = analyzer_config or {}
 
-        from .detection import ObjectDetector, ObjectTracker, VideoProcessor
+        from .detection import CPUOptimizedDetector, ByteTrackTracker, CPUOptimizedVideoProcessor
         from utils.logging import get_pipeline_logger
 
         logger = get_pipeline_logger("video_pipeline")
 
-        self.detector = ObjectDetector(
-            model_path=detector_config.get('model_path', 'models/yolov8n.pt'),
-            confidence_threshold=detector_config.get('confidence_threshold', 0.5)
+        self.detector = CPUOptimizedDetector(
+            model_path=detector_config.get('model_path', 'yolov8n.pt'),
+            confidence_threshold=detector_config.get('confidence_threshold', 0.5),
+            use_onnx=detector_config.get('use_onnx', True),
+            input_size=detector_config.get('input_size', 416)
         )
 
-        self.tracker = ObjectTracker(
-            max_age=detector_config.get('max_age', 30),
-            n_init=detector_config.get('n_init', 3)
+        self.tracker = ByteTrackTracker(
+            frame_rate=detector_config.get('frame_rate', 15),
+            track_thresh=detector_config.get('track_thresh', 0.5),
+            track_buffer=detector_config.get('track_buffer', 30),
+            match_thresh=detector_config.get('match_thresh', 0.8)
         )
 
-        self.processor = VideoProcessor(self.detector, self.tracker)
+        max_resolution = detector_config.get('max_resolution', (640, 480))
+        self.processor = CPUOptimizedVideoProcessor(self.detector, self.tracker, max_resolution)
         self.analyzer = BehaviorAnalyzer(
             loitering_threshold=analyzer_config.get('loitering_threshold', 30),
             abandoned_object_threshold=analyzer_config.get('abandoned_threshold', 60)

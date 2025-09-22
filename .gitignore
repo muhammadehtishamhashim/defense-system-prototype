@@ -30,7 +30,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+venv*
 # PyTorch models and data
 *.pth
 *.pt

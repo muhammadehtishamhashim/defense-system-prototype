@@ -16,7 +16,7 @@ from .anomaly_detector import (
     MotionBasedDetector, EnsembleDetector, AnomalyResult
 )
 from utils.logging import get_pipeline_logger
-from utils.base_pipeline import BasePipeline
+from pipelines.base import BasePipeline
 
 logger = get_pipeline_logger("border_anomaly")
 

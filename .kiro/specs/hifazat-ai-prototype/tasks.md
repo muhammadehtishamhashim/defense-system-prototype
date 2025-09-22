@@ -51,13 +51,16 @@
     - Create end-to-end tests for threat detection workflow
     - _Requirements: 1.4, 1.5_
 
-- [x] 4. Develop Video Surveillance Pipeline
-  - [x] 4.1 Implement object detection and tracking
-    - Set up YOLOv8 model loading and inference
-    - Implement DeepSORT tracking for multi-object tracking
-    - Create video frame processing pipeline
-    - Add support for multiple input sources (files, streams)
+- [x] 4. Develop Video Surveillance Pipeline (CPU-Optimized)
+  - [x] 4.1 Implement object detection and tracking with CPU optimization
+    - Set up YOLOv8 Nano model for CPU inference (optimized for i5 6th gen)
+    - Implement ByteTrack for lightweight multi-object tracking
+    - Create video frame processing pipeline with frame skipping
+    - Add support for multiple input sources with reduced resolution
+    - Implement ONNX export for faster CPU inference
     - Write tests with sample video data
+    -Note these task were changed and has already been implemented.
+    You need to check what was that code and edit it or remove it based on  your needs
     - _Requirements: 2.1, 2.2, 2.6_
 
   - [x] 4.2 Build behavior analysis engine
@@ -83,9 +86,11 @@
     - Write unit tests for trajectory processing
     - _Requirements: 3.1, 3.2_
 
-  - [x] 5.2 Build anomaly detection model
-    - Implement Isolation Forest anomaly detector
-    - Create autoencoder-based anomaly detection as alternative
+  - [x] 5.2 Build anomaly detection model (CPU-Optimized)
+    - Below are task have already been completed. We had later modified them.
+    - So will see the old task code. So you have to edit it and other instructions to follow
+    - Implement Isolation Forest anomaly detector (primary for CPU)
+    - Create PyOD-based ensemble detector for baseline comparison
     - Add motion-based fallback detection system
     - Implement anomaly scoring and threshold tuning
     - Write tests with synthetic anomaly data
@@ -131,16 +136,24 @@
     - Create error log viewer and system diagnostics
     - _Requirements: 5.5, 6.1_
 
-- [ ] 7. Implement evaluation and testing framework
-  - [ ] 7.1 Create model evaluation scripts
-    - Implement precision/recall calculation for threat intelligence
-    - Create mAP calculation for video object detection
-    - Add anomaly detection recall measurement
-    - Generate confusion matrices and performance reports
-    - Create automated evaluation pipeline
+- [ ] 7. Implement evaluation and testing framework (GitHub-based)
+  - [ ] 7.1 Set up evaluation repositories and datasets
+    - Clone and configure Ultralytics/YOLOv8 for detection evaluation
+    - Set up ByteTrack repository for tracking metrics (MOTA, IDF1)
+    - Configure PyOD for anomaly detection evaluation
+    - Download VisDrone dataset subset for testing
+    - Set up MOT17/MOT20 dataset samples for tracking evaluation
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 7.2 Build test data management system
+  - [ ] 7.2 Create model evaluation scripts
+    - Implement mAP calculation using pycocotools for object detection
+    - Create MOTA/MOTP/IDF1 calculation using motmetrics
+    - Add anomaly detection recall/precision measurement using PyOD
+    - Generate confusion matrices and performance reports
+    - Create automated evaluation pipeline with GitHub Actions
+    - _Requirements: 8.1, 8.2, 8.3, 8.4_
+
+  - [ ] 7.3 Build test data management system
     - Create synthetic data generators for each pipeline
     - Implement test dataset loading and validation
     - Add ground truth labeling utilities
@@ -148,8 +161,25 @@
     - Write integration tests with test datasets
     - _Requirements: 8.5_
 
-- [ ] 8. Integrate frontend and backend systems
-  - [ ] 8.1 Implement API integration layer
+- [ ] 8. Optimize for i5 6th Gen CPU Performance
+  - [ ] 8.1 Implement CPU-specific optimizations
+    - Configure OpenMP and MKL thread limits for 4-core CPU
+    - Implement model quantization for faster inference
+    - Add memory management and garbage collection optimization
+    - Create CPU-optimized configuration profiles
+    - Implement frame skipping and batch processing optimization
+    - _Requirements: 6.2, 6.3_
+
+  - [ ] 8.2 Set up lightweight model variants
+    - Export YOLOv8n to ONNX format for CPU optimization
+    - Configure DistilBERT for threat intelligence (CPU-friendly)
+    - Implement model caching and lazy loading
+    - Add fallback mechanisms for resource constraints
+    - Create performance monitoring and auto-scaling
+    - _Requirements: 2.1, 2.7_
+
+- [ ] 9. Integrate frontend and backend systems
+  - [ ] 9.1 Implement API integration layer
     - Connect React frontend to FastAPI backend
     - Implement real-time updates using WebSockets or Server-Sent Events
     - Add error handling and retry logic for API calls
@@ -157,7 +187,7 @@
     - Test cross-origin resource sharing (CORS) configuration
     - _Requirements: 4.4, 5.6_
 
-  - [ ] 8.2 Build end-to-end demonstration workflow
+  - [ ] 9.2 Build end-to-end demonstration workflow
     - Create demo data pipeline with sample inputs
     - Implement complete workflow from data ingestion to alert display
     - Add demo mode with pre-recorded scenarios
@@ -165,8 +195,25 @@
     - Test complete system integration
     - _Requirements: 8.1, 8.5_
 
-- [ ] 9. Implement security and privacy features
-  - [ ] 9.1 Add authentication and authorization
+- [ ] 10. Cloud deployment and service integration
+  - [ ] 10.1 Set up Google Cloud/Colab integration
+    - Create Google Colab notebooks for development and testing
+    - Configure Google Cloud Run deployment with CPU optimization
+    - Set up Google Cloud Storage for model and data storage
+    - Implement Cloud Functions for serverless processing
+    - Create deployment scripts for GCP services
+    - _Requirements: 6.1, 6.3_
+
+  - [ ] 10.2 Configure Docker and container deployment
+    - Create optimized Dockerfiles for CPU-only deployment
+    - Set up Docker Compose with resource limits for i5 6th gen
+    - Configure container orchestration with memory constraints
+    - Implement health checks and auto-restart policies
+    - Create deployment guides for various cloud platforms
+    - _Requirements: 6.1, 6.5_
+
+- [ ] 11. Implement security and privacy features
+  - [ ] 11.1 Add authentication and authorization
     - Implement JWT-based authentication for API access
     - Create user login/logout functionality in frontend
     - Add role-based access control for different user types
@@ -174,7 +221,7 @@
     - Write security tests for authentication flows
     - _Requirements: 7.5_
 
-  - [ ] 9.2 Implement privacy protection features
+  - [ ] 11.2 Implement privacy protection features
     - Add face redaction capabilities for video processing
     - Implement data retention policies and cleanup
     - Create audit logging for data access and modifications
@@ -182,19 +229,19 @@
     - Write privacy compliance tests
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 10. Create deployment and documentation
-  - [ ] 10.1 Prepare production deployment configuration
-    - Create Docker Compose configuration for all services
-    - Set up environment variable management
-    - Implement health checks and monitoring endpoints
-    - Create backup and recovery procedures
-    - Write deployment documentation and runbooks
-    - _Requirements: 6.1, 6.3, 6.5_
-
-  - [ ] 10.2 Generate comprehensive documentation
+- [ ] 12. Create comprehensive documentation and deployment guides
+  - [ ] 12.1 Generate technical documentation
     - Create API documentation with examples
     - Write user manual for dashboard interface
     - Document system architecture and design decisions
     - Create troubleshooting guide and FAQ
     - Generate evaluation report with performance metrics
     - _Requirements: 8.5_
+
+  - [ ] 12.2 Create deployment and usage instructions
+    - Write comprehensive setup guide for various platforms
+    - Create Docker deployment instructions
+    - Document cloud service integration (GCP, AWS, Azure)
+    - Add performance optimization guide for different hardware
+    - Create maintenance and monitoring procedures
+    - _Requirements: 6.1, 6.3, 6.5_

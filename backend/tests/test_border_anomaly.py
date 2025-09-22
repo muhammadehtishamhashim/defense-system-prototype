@@ -15,9 +15,13 @@ from pipelines.border_anomaly.trajectory import (
     TrajectoryVisualizer, create_sample_trajectory
 )
 from pipelines.border_anomaly.anomaly_detector import (
-    IsolationForestDetector, MotionBasedDetector, AnomalyResult
+    IsolationForestDetector, MotionBasedDetector, AnomalyResult,
+    PyODEnsembleDetector, create_synthetic_anomaly_data
 )
 from pipelines.border_anomaly.pipeline import BorderAnomalyPipeline, DEFAULT_CONFIG
+from utils.logging import get_pipeline_logger
+
+logger = get_pipeline_logger("test_border_anomaly")
 
 
 class TestTrajectoryPoint(unittest.TestCase):
@@ -325,6 +329,236 @@ class TestIsolationForestDetector(unittest.TestCase):
         
         with self.assertRaises(ValueError):
             self.detector.predict(trajectory)
+
+
+class TestPyODEnsembleDetector(unittest.TestCase):
+    """Test PyODEnsembleDetector class"""
+    
+    def setUp(self):
+        """Set up PyOD ensemble detector"""
+        try:
+            self.detector = PyODEnsembleDetector(contamination=0.2)
+            self.pyod_available = True
+        except ImportError:
+            self.pyod_available = False
+            self.skipTest("PyOD not available")
+    
+    def test_training_and_prediction(self):
+        """Test training and prediction with synthetic data"""
+        if not self.pyod_available:
+            self.skipTest("PyOD not available")
+        
+        # Create synthetic training data
+        trajectories, labels = create_synthetic_anomaly_data(num_normal=30, num_anomalies=5)
+        normal_trajectories = [t for t, l in zip(trajectories, labels) if not l]
+        
+        # Train detector on normal data only
+        self.detector.fit(normal_trajectories)
+        self.assertTrue(self.detector.is_fitted)
+        
+        # Test prediction on all data
+        results = []
+        for trajectory in trajectories:
+            result = self.detector.predict(trajectory)
+            results.append(result)
+            self.assertIsInstance(result, AnomalyResult)
+            self.assertEqual(result.detection_method, "pyod_ensemble")
+        
+        # Check that some anomalies are detected
+        detected_anomalies = sum(1 for r in results if r.is_anomaly)
+        self.assertGreater(detected_anomalies, 0)
+    
+    def test_combination_methods(self):
+        """Test different combination methods"""
+        if not self.pyod_available:
+            self.skipTest("PyOD not available")
+        
+        methods = ['average', 'max', 'aom', 'moa']
+        trajectories, _ = create_synthetic_anomaly_data(num_normal=20, num_anomalies=3)
+        normal_trajectories = [t for t, l in zip(trajectories, _) if not l]
+        
+        for method in methods:
+            detector = PyODEnsembleDetector(combination_method=method)
+            detector.fit(normal_trajectories)
+            
+            # Test prediction
+            test_trajectory = trajectories[0]
+            result = detector.predict(test_trajectory)
+            self.assertIsInstance(result, AnomalyResult)
+            self.assertIn('combination_method', result.details)
+            self.assertEqual(result.details['combination_method'], method)
+
+
+class TestEnhancedMotionBasedDetector(unittest.TestCase):
+    """Test enhanced MotionBasedDetector with adaptive thresholds"""
+    
+    def setUp(self):
+        """Set up enhanced motion-based detector"""
+        self.detector = MotionBasedDetector(adaptive_thresholds=True)
+    
+    def test_adaptive_threshold_training(self):
+        """Test adaptive threshold computation"""
+        # Create training data
+        trajectories, _ = create_synthetic_anomaly_data(num_normal=20, num_anomalies=0)
+        
+        # Train detector
+        self.detector.fit(trajectories)
+        self.assertTrue(self.detector.is_fitted)
+        self.assertIsInstance(self.detector.computed_thresholds, dict)
+        
+        # Check that thresholds were computed
+        expected_keys = ['speed', 'direction_changes', 'curvature', 'stop_duration']
+        for key in expected_keys:
+            self.assertIn(key, self.detector.computed_thresholds)
+            self.assertIsInstance(self.detector.computed_thresholds[key], (int, float))
+    
+    def test_enhanced_anomaly_detection(self):
+        """Test enhanced anomaly detection with multiple criteria"""
+        # Create synthetic data with known anomalies
+        trajectories, labels = create_synthetic_anomaly_data(num_normal=15, num_anomalies=5)
+        normal_trajectories = [t for t, l in zip(trajectories, labels) if not l]
+        
+        # Train on normal data
+        self.detector.fit(normal_trajectories)
+        
+        # Test on all data
+        results = []
+        for trajectory, is_anomaly in zip(trajectories, labels):
+            result = self.detector.predict(trajectory)
+            results.append((result, is_anomaly))
+            
+            # Check result structure
+            self.assertIsInstance(result, AnomalyResult)
+            self.assertIn('anomaly_reasons', result.details)
+            self.assertIn('thresholds_used', result.details)
+            self.assertIn('features', result.details)
+        
+        # Calculate detection performance
+        true_positives = sum(1 for r, l in results if r.is_anomaly and l)
+        false_positives = sum(1 for r, l in results if r.is_anomaly and not l)
+        true_negatives = sum(1 for r, l in results if not r.is_anomaly and not l)
+        false_negatives = sum(1 for r, l in results if not r.is_anomaly and l)
+        
+        # Should detect at least some anomalies
+        self.assertGreater(true_positives, 0)
+        
+        # Calculate precision and recall
+        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+        
+        logger.info(f"Enhanced MotionBasedDetector - Precision: {precision:.3f}, Recall: {recall:.3f}")
+    
+    def test_non_adaptive_mode(self):
+        """Test detector in non-adaptive mode"""
+        detector = MotionBasedDetector(adaptive_thresholds=False)
+        self.assertTrue(detector.is_fitted)  # Should be fitted immediately
+        
+        # Should work without training
+        trajectory = create_sample_trajectory(track_id=1, num_points=10)
+        result = detector.predict(trajectory)
+        self.assertIsInstance(result, AnomalyResult)
+
+
+class TestCPUOptimizedIsolationForest(unittest.TestCase):
+    """Test CPU-optimized IsolationForestDetector"""
+    
+    def setUp(self):
+        """Set up CPU-optimized detector"""
+        self.detector = IsolationForestDetector(
+            n_estimators=25,  # Reduced for faster testing
+            n_jobs=1  # Single thread for testing
+        )
+    
+    def test_cpu_optimization_parameters(self):
+        """Test that CPU optimization parameters are set correctly"""
+        self.assertEqual(self.detector.n_estimators, 25)
+        self.assertEqual(self.detector.n_jobs, 1)
+        self.assertFalse(self.detector.model.bootstrap)
+        self.assertFalse(self.detector.model.warm_start)
+    
+    def test_performance_with_synthetic_data(self):
+        """Test performance on synthetic anomaly data"""
+        # Create larger dataset for better evaluation
+        trajectories, labels = create_synthetic_anomaly_data(num_normal=40, num_anomalies=10)
+        normal_trajectories = [t for t, l in zip(trajectories, labels) if not l]
+        
+        # Train detector
+        start_time = datetime.now()
+        self.detector.fit(normal_trajectories)
+        training_time = (datetime.now() - start_time).total_seconds()
+        
+        # Test prediction speed
+        start_time = datetime.now()
+        results = []
+        for trajectory in trajectories:
+            result = self.detector.predict(trajectory)
+            results.append(result)
+        prediction_time = (datetime.now() - start_time).total_seconds()
+        
+        # Calculate performance metrics
+        true_labels = labels
+        predicted_labels = [r.is_anomaly for r in results]
+        
+        true_positives = sum(1 for t, p in zip(true_labels, predicted_labels) if t and p)
+        false_positives = sum(1 for t, p in zip(true_labels, predicted_labels) if not t and p)
+        true_negatives = sum(1 for t, p in zip(true_labels, predicted_labels) if not t and not p)
+        false_negatives = sum(1 for t, p in zip(true_labels, predicted_labels) if t and not p)
+        
+        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+        
+        logger.info(f"CPU-optimized IsolationForest - Training time: {training_time:.3f}s, "
+                   f"Prediction time: {prediction_time:.3f}s, Precision: {precision:.3f}, Recall: {recall:.3f}")
+        
+        # Should achieve reasonable performance
+        self.assertGreater(recall, 0.3)  # At least 30% recall
+
+
+class TestSyntheticAnomalyData(unittest.TestCase):
+    """Test synthetic anomaly data generation"""
+    
+    def test_data_generation(self):
+        """Test synthetic data generation function"""
+        trajectories, labels = create_synthetic_anomaly_data(num_normal=10, num_anomalies=5)
+        
+        # Check correct number of trajectories
+        self.assertEqual(len(trajectories), 15)
+        self.assertEqual(len(labels), 15)
+        
+        # Check label distribution
+        normal_count = sum(1 for l in labels if not l)
+        anomaly_count = sum(1 for l in labels if l)
+        self.assertEqual(normal_count, 10)
+        self.assertEqual(anomaly_count, 5)
+        
+        # Check trajectory validity
+        for trajectory in trajectories:
+            self.assertIsInstance(trajectory, Trajectory)
+            self.assertGreater(len(trajectory.points), 0)
+            self.assertTrue(trajectory.track_id >= 0)
+    
+    def test_anomaly_types(self):
+        """Test that different anomaly types are generated"""
+        # Generate more anomalies to increase chance of different types
+        trajectories, labels = create_synthetic_anomaly_data(num_normal=5, num_anomalies=20)
+        anomaly_trajectories = [t for t, l in zip(trajectories, labels) if l]
+        
+        # Analyze trajectories to check for different anomaly characteristics
+        analyzer = TrajectoryAnalyzer()
+        features = []
+        for trajectory in anomaly_trajectories:
+            if trajectory.is_valid:
+                feature = analyzer.analyze_trajectory(trajectory)
+                features.append(feature)
+        
+        # Check for variety in features (indicating different anomaly types)
+        speeds = [f.max_speed for f in features]
+        direction_changes = [f.direction_changes for f in features]
+        durations = [f.duration for f in features]
+        
+        # Should have variety in characteristics
+        self.assertGreater(max(speeds) - min(speeds), 50)  # Speed variation
+        self.assertGreater(max(direction_changes) - min(direction_changes), 5)  # Direction change variation
 
 
 class TestBorderAnomalyPipeline(unittest.TestCase):

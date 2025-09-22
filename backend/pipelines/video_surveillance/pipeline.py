@@ -15,7 +15,7 @@ import json
 from pipelines.base import BasePipeline
 from models.alerts import VideoAlert
 from utils.logging import get_pipeline_logger
-from .detection import VideoInputSource
+from .detection import CPUOptimizedVideoSource
 from .analysis import VideoAnalysisPipeline, Zone
 
 logger = get_pipeline_logger("video_surveillance")
@@ -98,7 +98,11 @@ class VideoSurveillancePipeline(BasePipeline):
 
             if source_url:
                 try:
-                    video_source = VideoInputSource(source_url)
+                    video_source = CPUOptimizedVideoSource(
+                        source_url,
+                        target_fps=source_config.get('target_fps', 15),
+                        max_resolution=source_config.get('max_resolution', (640, 480))
+                    )
                     self.active_streams[source_name] = {
                         'source': video_source,
                         'config': source_config,
@@ -285,7 +289,11 @@ class VideoSurveillancePipeline(BasePipeline):
             config = {}
 
         try:
-            video_source = VideoInputSource(url)
+            video_source = CPUOptimizedVideoSource(
+                url,
+                target_fps=config.get('target_fps', 15),
+                max_resolution=config.get('max_resolution', (640, 480))
+            )
             self.active_streams[name] = {
                 'source': video_source,
                 'config': config,

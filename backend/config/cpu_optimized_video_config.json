@@ -1,0 +1,72 @@
+{
+  "pipeline_name": "video_surveillance",
+  "enabled": true,
+  "confidence_threshold": 0.5,
+  
+  "detector_config": {
+    "model_path": "yolov8n.pt",
+    "confidence_threshold": 0.5,
+    "use_onnx": true,
+    "input_size": 416,
+    "frame_rate": 15,
+    "max_resolution": [640, 480]
+  },
+  
+  "analyzer_config": {
+    "loitering_threshold": 30,
+    "abandoned_threshold": 60
+  },
+  
+  "video_sources": [
+    {
+      "name": "camera_1",
+      "url": "0",
+      "target_fps": 15,
+      "max_resolution": [640, 480],
+      "enabled": true
+    }
+  ],
+  
+  "detection_zones": [
+    {
+      "id": "restricted_area_1",
+      "name": "Main Entrance",
+      "points": [[100, 100], [500, 100], [500, 300], [100, 300]],
+      "color": [0, 0, 255],
+      "restricted": true,
+      "min_dwell_time": 10
+    }
+  ],
+  
+  "cpu_optimization": {
+    "num_threads": 4,
+    "frame_skip": 2,
+    "batch_processing": false,
+    "memory_limit_mb": 512,
+    "enable_quantization": true
+  },
+  
+  "performance_settings": {
+    "max_concurrent_streams": 2,
+    "buffer_size": 5,
+    "processing_timeout": 5.0,
+    "auto_resolution_scaling": true,
+    "adaptive_fps": true
+  },
+  
+  "snapshot_enabled": true,
+  "snapshot_dir": "media/snapshots",
+  "realtime_processing": true,
+  
+  "alert_settings": {
+    "min_confidence": 0.6,
+    "alert_cooldown": 5,
+    "max_alerts_per_minute": 10
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "enable_performance_logs": true,
+    "log_detection_stats": false
+  }
+}

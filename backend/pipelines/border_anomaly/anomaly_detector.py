@@ -24,10 +24,176 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
+try:
+    from pyod.models.iforest import IForest
+    from pyod.models.lof import LOF
+    from pyod.models.ocsvm import OCSVM
+    from pyod.models.combination import aom, moa, average, maximization
+    PYOD_AVAILABLE = True
+except ImportError:
+    PYOD_AVAILABLE = False
+
 from .trajectory import Trajectory, TrajectoryFeatures, TrajectoryAnalyzer
 from utils.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("border_anomaly")
+
+
+def create_synthetic_anomaly_data(num_normal: int = 50, num_anomalies: int = 10) -> Tuple[List['Trajectory'], List[bool]]:
+    """
+    Create synthetic trajectory data with known anomalies for testing
+    
+    Args:
+        num_normal: Number of normal trajectories to generate
+        num_anomalies: Number of anomalous trajectories to generate
+    
+    Returns:
+        Tuple of (trajectories, labels) where labels indicate anomalies
+    """
+    from .trajectory import TrajectoryPoint, Trajectory
+    from datetime import timedelta
+    trajectories = []
+    labels = []
+    
+    # Generate normal trajectories
+    for i in range(num_normal):
+        # Normal trajectory: smooth, moderate speed, straight-ish path
+        start_time = datetime.now()
+        points = []
+        
+        # Random starting position
+        start_x = np.random.uniform(100, 800)
+        start_y = np.random.uniform(100, 500)
+        
+        # Normal movement parameters
+        direction = np.random.uniform(0, 2 * np.pi)
+        speed = np.random.uniform(20, 60)  # Normal speed
+        
+        for j in range(np.random.randint(10, 25)):  # Normal trajectory length
+            # Add some noise but keep movement smooth
+            noise_x = np.random.normal(0, 5)
+            noise_y = np.random.normal(0, 5)
+            
+            x = start_x + j * speed * np.cos(direction) + noise_x
+            y = start_y + j * speed * np.sin(direction) + noise_y
+            
+            # Slight direction changes (normal behavior)
+            direction += np.random.normal(0, 0.1)
+            
+            point = TrajectoryPoint(
+                x=max(0, min(1920, x)),
+                y=max(0, min(1080, y)),
+                timestamp=start_time + timedelta(seconds=j * 0.5),
+                frame_number=j,
+                confidence=np.random.uniform(0.8, 1.0)
+            )
+            points.append(point)
+        
+        trajectory = Trajectory(
+            track_id=i,
+            points=points,
+            start_time=start_time,
+            end_time=start_time + timedelta(seconds=len(points) * 0.5)
+        )
+        trajectories.append(trajectory)
+        labels.append(False)  # Normal
+    
+    # Generate anomalous trajectories
+    for i in range(num_anomalies):
+        start_time = datetime.now()
+        points = []
+        
+        # Random starting position
+        start_x = np.random.uniform(100, 800)
+        start_y = np.random.uniform(100, 500)
+        
+        # Choose anomaly type
+        anomaly_type = np.random.choice(['high_speed', 'erratic_movement', 'zigzag', 'loitering'])
+        
+        if anomaly_type == 'high_speed':
+            # Very high speed trajectory
+            direction = np.random.uniform(0, 2 * np.pi)
+            speed = np.random.uniform(150, 300)  # Anomalously high speed
+            
+            for j in range(np.random.randint(5, 15)):
+                x = start_x + j * speed * np.cos(direction)
+                y = start_y + j * speed * np.sin(direction)
+                
+                point = TrajectoryPoint(
+                    x=max(0, min(1920, x)),
+                    y=max(0, min(1080, y)),
+                    timestamp=start_time + timedelta(seconds=j * 0.2),  # Fast movement
+                    frame_number=j,
+                    confidence=np.random.uniform(0.7, 0.9)
+                )
+                points.append(point)
+        
+        elif anomaly_type == 'erratic_movement':
+            # Frequent direction changes
+            direction = np.random.uniform(0, 2 * np.pi)
+            speed = np.random.uniform(30, 80)
+            
+            for j in range(np.random.randint(15, 30)):
+                # Frequent large direction changes
+                direction += np.random.uniform(-np.pi/2, np.pi/2)
+                
+                x = start_x + j * speed * np.cos(direction)
+                y = start_y + j * speed * np.sin(direction)
+                
+                point = TrajectoryPoint(
+                    x=max(0, min(1920, x)),
+                    y=max(0, min(1080, y)),
+                    timestamp=start_time + timedelta(seconds=j * 0.5),
+                    frame_number=j,
+                    confidence=np.random.uniform(0.6, 0.9)
+                )
+                points.append(point)
+        
+        elif anomaly_type == 'zigzag':
+            # Zigzag pattern
+            for j in range(np.random.randint(20, 40)):
+                # Alternating direction
+                direction = np.pi/4 if j % 4 < 2 else -np.pi/4
+                speed = np.random.uniform(40, 80)
+                
+                x = start_x + j * speed * np.cos(direction) * 0.5
+                y = start_y + j * speed * np.sin(direction) * 0.5
+                
+                point = TrajectoryPoint(
+                    x=max(0, min(1920, x)),
+                    y=max(0, min(1080, y)),
+                    timestamp=start_time + timedelta(seconds=j * 0.3),
+                    frame_number=j,
+                    confidence=np.random.uniform(0.7, 0.9)
+                )
+                points.append(point)
+        
+        elif anomaly_type == 'loitering':
+            # Staying in small area for long time
+            for j in range(np.random.randint(30, 60)):  # Long trajectory
+                # Small random movements around starting position
+                x = start_x + np.random.normal(0, 20)
+                y = start_y + np.random.normal(0, 20)
+                
+                point = TrajectoryPoint(
+                    x=max(0, min(1920, x)),
+                    y=max(0, min(1080, y)),
+                    timestamp=start_time + timedelta(seconds=j * 0.5),
+                    frame_number=j,
+                    confidence=np.random.uniform(0.8, 1.0)
+                )
+                points.append(point)
+        
+        trajectory = Trajectory(
+            track_id=num_normal + i,
+            points=points,
+            start_time=start_time,
+            end_time=start_time + timedelta(seconds=len(points) * 0.5)
+        )
+        trajectories.append(trajectory)
+        labels.append(True)  # Anomaly
+    
+    return trajectories, labels
 
 
 @dataclass
@@ -67,28 +233,43 @@ class AnomalyDetector(ABC):
 
 
 class IsolationForestDetector(AnomalyDetector):
-    """Isolation Forest-based anomaly detector"""
+    """CPU-optimized Isolation Forest-based anomaly detector"""
     
-    def __init__(self, contamination: float = 0.1, random_state: int = 42):
+    def __init__(self, contamination: float = 0.1, random_state: int = 42, 
+                 n_estimators: int = 50, max_samples: str = 'auto', n_jobs: int = -1):
         """
-        Initialize Isolation Forest detector
+        Initialize CPU-optimized Isolation Forest detector
         
         Args:
             contamination: Expected proportion of anomalies
             random_state: Random seed for reproducibility
+            n_estimators: Number of trees (reduced for CPU optimization)
+            max_samples: Number of samples to draw for each tree
+            n_jobs: Number of CPU cores to use (-1 for all available)
         """
         self.contamination = contamination
         self.random_state = random_state
+        self.n_estimators = n_estimators
+        self.max_samples = max_samples
+        self.n_jobs = n_jobs
+        
+        # CPU-optimized parameters
         self.model = IsolationForest(
             contamination=contamination,
             random_state=random_state,
-            n_estimators=100
+            n_estimators=n_estimators,
+            max_samples=max_samples,
+            n_jobs=n_jobs,
+            bootstrap=False,  # Faster for CPU
+            warm_start=False
         )
         self.scaler = StandardScaler()
         self.analyzer = TrajectoryAnalyzer()
         self.is_fitted = False
+        self.threshold = None
         
-        logger.info(f"IsolationForestDetector initialized (contamination={contamination})")
+        logger.info(f"CPU-optimized IsolationForestDetector initialized "
+                   f"(contamination={contamination}, n_estimators={n_estimators})")
     
     def fit(self, trajectories: List[Trajectory]) -> None:
         """Train the Isolation Forest model"""
@@ -435,29 +616,82 @@ class AutoencoderDetector(AnomalyDetector):
 
 
 class MotionBasedDetector(AnomalyDetector):
-    """Simple motion-based anomaly detector as fallback"""
+    """Enhanced motion-based anomaly detector with adaptive thresholds"""
     
-    def __init__(self, speed_threshold: float = 100.0, direction_change_threshold: int = 5):
+    def __init__(self, speed_threshold: float = 100.0, direction_change_threshold: int = 5,
+                 curvature_threshold: float = 0.5, stop_duration_threshold: float = 5.0,
+                 adaptive_thresholds: bool = True):
         """
-        Initialize motion-based detector
+        Initialize enhanced motion-based detector
         
         Args:
             speed_threshold: Maximum normal speed (pixels/second)
             direction_change_threshold: Maximum normal direction changes
+            curvature_threshold: Maximum normal path curvature
+            stop_duration_threshold: Maximum normal stop duration (seconds)
+            adaptive_thresholds: Whether to adapt thresholds based on training data
         """
         self.speed_threshold = speed_threshold
         self.direction_change_threshold = direction_change_threshold
-        self.analyzer = TrajectoryAnalyzer()
-        self.is_fitted = True  # No training required
+        self.curvature_threshold = curvature_threshold
+        self.stop_duration_threshold = stop_duration_threshold
+        self.adaptive_thresholds = adaptive_thresholds
         
-        logger.info(f"MotionBasedDetector initialized (speed_threshold={speed_threshold})")
+        # Adaptive threshold parameters
+        self.training_features = []
+        self.computed_thresholds = {}
+        
+        self.analyzer = TrajectoryAnalyzer()
+        self.is_fitted = not adaptive_thresholds  # If adaptive, needs training
+        
+        logger.info(f"Enhanced MotionBasedDetector initialized "
+                   f"(adaptive_thresholds={adaptive_thresholds})")
     
     def fit(self, trajectories: List[Trajectory]) -> None:
-        """No training required for motion-based detector"""
-        logger.info("MotionBasedDetector requires no training")
+        """Train adaptive thresholds if enabled"""
+        if not self.adaptive_thresholds:
+            logger.info("MotionBasedDetector requires no training (adaptive_thresholds=False)")
+            return
+        
+        if not trajectories:
+            logger.warning("No trajectories provided for adaptive threshold training")
+            self.is_fitted = True
+            return
+        
+        # Extract features from training trajectories
+        self.training_features = []
+        for trajectory in trajectories:
+            if trajectory.is_valid:
+                features = self.analyzer.analyze_trajectory(trajectory)
+                self.training_features.append(features)
+        
+        if not self.training_features:
+            logger.warning("No valid trajectories found for training")
+            self.is_fitted = True
+            return
+        
+        # Compute adaptive thresholds based on training data
+        speeds = [f.max_speed for f in self.training_features]
+        direction_changes = [f.direction_changes for f in self.training_features]
+        curvatures = [f.path_curvature for f in self.training_features]
+        stop_durations = [f.stop_duration for f in self.training_features]
+        
+        # Use 95th percentile as threshold for anomaly detection
+        self.computed_thresholds = {
+            'speed': np.percentile(speeds, 95) if speeds else self.speed_threshold,
+            'direction_changes': np.percentile(direction_changes, 95) if direction_changes else self.direction_change_threshold,
+            'curvature': np.percentile(curvatures, 95) if curvatures else self.curvature_threshold,
+            'stop_duration': np.percentile(stop_durations, 95) if stop_durations else self.stop_duration_threshold
+        }
+        
+        self.is_fitted = True
+        logger.info(f"Adaptive thresholds computed: {self.computed_thresholds}")
     
     def predict(self, trajectory: Trajectory) -> AnomalyResult:
-        """Detect anomalies based on simple motion rules"""
+        """Detect anomalies based on enhanced motion rules with adaptive thresholds"""
+        if not self.is_fitted:
+            raise ValueError("Model not fitted. Call fit() first for adaptive thresholds.")
+        
         if not trajectory.is_valid:
             return AnomalyResult(
                 trajectory_id=trajectory.track_id,
@@ -472,62 +706,296 @@ class MotionBasedDetector(AnomalyDetector):
         # Analyze trajectory
         features = self.analyzer.analyze_trajectory(trajectory)
         
-        # Check for anomalies
+        # Use adaptive thresholds if available, otherwise use default thresholds
+        thresholds = self.computed_thresholds if self.adaptive_thresholds and self.computed_thresholds else {
+            'speed': self.speed_threshold,
+            'direction_changes': self.direction_change_threshold,
+            'curvature': self.curvature_threshold,
+            'stop_duration': self.stop_duration_threshold
+        }
+        
+        # Check for anomalies with weighted scoring
         anomaly_reasons = []
-        anomaly_score = 0.0
+        anomaly_scores = {}
         
         # High speed anomaly
-        if features.max_speed > self.speed_threshold:
+        if features.max_speed > thresholds['speed']:
             anomaly_reasons.append("excessive_speed")
-            anomaly_score += (features.max_speed - self.speed_threshold) / self.speed_threshold
+            anomaly_scores['speed'] = (features.max_speed - thresholds['speed']) / thresholds['speed']
         
         # Excessive direction changes
-        if features.direction_changes > self.direction_change_threshold:
+        if features.direction_changes > thresholds['direction_changes']:
             anomaly_reasons.append("erratic_movement")
-            anomaly_score += (features.direction_changes - self.direction_change_threshold) / self.direction_change_threshold
+            anomaly_scores['direction_changes'] = (features.direction_changes - thresholds['direction_changes']) / thresholds['direction_changes']
+        
+        # High path curvature (complex path)
+        if features.path_curvature > thresholds['curvature']:
+            anomaly_reasons.append("complex_path")
+            anomaly_scores['curvature'] = (features.path_curvature - thresholds['curvature']) / thresholds['curvature']
+        
+        # Excessive stop duration
+        if features.stop_duration > thresholds['stop_duration']:
+            anomaly_reasons.append("excessive_stopping")
+            anomaly_scores['stop_duration'] = (features.stop_duration - thresholds['stop_duration']) / thresholds['stop_duration']
         
         # Very low straightness (zigzag pattern)
         if features.straightness_ratio < 0.3:
             anomaly_reasons.append("zigzag_pattern")
-            anomaly_score += (0.3 - features.straightness_ratio) / 0.3
+            anomaly_scores['straightness'] = (0.3 - features.straightness_ratio) / 0.3
         
+        # Unusual acceleration patterns
+        if features.acceleration_variance > 1000:  # High variance in acceleration
+            anomaly_reasons.append("erratic_acceleration")
+            anomaly_scores['acceleration'] = min(1.0, features.acceleration_variance / 2000)
+        
+        # Calculate weighted anomaly score
+        total_anomaly_score = sum(anomaly_scores.values())
         is_anomaly = len(anomaly_reasons) > 0
-        confidence = min(1.0, anomaly_score)
+        confidence = min(1.0, total_anomaly_score)
         
         return AnomalyResult(
             trajectory_id=trajectory.track_id,
             is_anomaly=is_anomaly,
-            anomaly_score=anomaly_score,
+            anomaly_score=total_anomaly_score,
             confidence=confidence,
             detection_method="motion_based",
             timestamp=datetime.now(),
             details={
                 "anomaly_reasons": anomaly_reasons,
-                "max_speed": features.max_speed,
-                "direction_changes": features.direction_changes,
-                "straightness_ratio": features.straightness_ratio
+                "anomaly_scores": anomaly_scores,
+                "thresholds_used": thresholds,
+                "features": {
+                    "max_speed": features.max_speed,
+                    "direction_changes": features.direction_changes,
+                    "path_curvature": features.path_curvature,
+                    "stop_duration": features.stop_duration,
+                    "straightness_ratio": features.straightness_ratio,
+                    "acceleration_variance": features.acceleration_variance
+                }
             }
         )
     
     def save_model(self, path: str) -> None:
-        """Save detector configuration"""
+        """Save detector configuration and adaptive thresholds"""
         config = {
             'speed_threshold': self.speed_threshold,
-            'direction_change_threshold': self.direction_change_threshold
+            'direction_change_threshold': self.direction_change_threshold,
+            'curvature_threshold': self.curvature_threshold,
+            'stop_duration_threshold': self.stop_duration_threshold,
+            'adaptive_thresholds': self.adaptive_thresholds,
+            'computed_thresholds': self.computed_thresholds,
+            'training_features_count': len(self.training_features) if self.training_features else 0
         }
         joblib.dump(config, path)
-        logger.info(f"MotionBasedDetector config saved to {path}")
+        logger.info(f"Enhanced MotionBasedDetector config saved to {path}")
     
     def load_model(self, path: str) -> None:
-        """Load detector configuration"""
+        """Load detector configuration and adaptive thresholds"""
         if not os.path.exists(path):
             raise FileNotFoundError(f"Config file not found: {path}")
         
         config = joblib.load(path)
         self.speed_threshold = config['speed_threshold']
         self.direction_change_threshold = config['direction_change_threshold']
+        self.curvature_threshold = config.get('curvature_threshold', 0.5)
+        self.stop_duration_threshold = config.get('stop_duration_threshold', 5.0)
+        self.adaptive_thresholds = config.get('adaptive_thresholds', True)
+        self.computed_thresholds = config.get('computed_thresholds', {})
+        self.is_fitted = True
         
-        logger.info(f"MotionBasedDetector config loaded from {path}")
+        logger.info(f"Enhanced MotionBasedDetector config loaded from {path}")
+
+
+class PyODEnsembleDetector(AnomalyDetector):
+    """PyOD-based ensemble detector for baseline comparison"""
+    
+    def __init__(self, contamination: float = 0.1, random_state: int = 42, 
+                 combination_method: str = 'average'):
+        """
+        Initialize PyOD ensemble detector
+        
+        Args:
+            contamination: Expected proportion of anomalies
+            random_state: Random seed for reproducibility
+            combination_method: Method to combine detector scores ('average', 'max', 'aom', 'moa')
+        """
+        if not PYOD_AVAILABLE:
+            raise ImportError("PyOD not available. Install pyod to use PyODEnsembleDetector.")
+        
+        self.contamination = contamination
+        self.random_state = random_state
+        self.combination_method = combination_method
+        
+        # Initialize individual detectors
+        self.detectors = {
+            'iforest': IForest(contamination=contamination, random_state=random_state, n_estimators=50),
+            'lof': LOF(contamination=contamination, n_neighbors=10),
+            'ocsvm': OCSVM(contamination=contamination, kernel='rbf', gamma='scale')
+        }
+        
+        self.scaler = StandardScaler()
+        self.analyzer = TrajectoryAnalyzer()
+        self.is_fitted = False
+        self.decision_scores_ = None
+        
+        logger.info(f"PyODEnsembleDetector initialized with {len(self.detectors)} detectors")
+    
+    def fit(self, trajectories: List[Trajectory]) -> None:
+        """Train all PyOD detectors in the ensemble"""
+        if not trajectories:
+            raise ValueError("No trajectories provided for training")
+        
+        # Extract features from trajectories
+        features = []
+        for trajectory in trajectories:
+            if trajectory.is_valid:
+                trajectory_features = self.analyzer.analyze_trajectory(trajectory)
+                feature_vector = self._extract_feature_vector(trajectory_features)
+                features.append(feature_vector)
+        
+        if not features:
+            raise ValueError("No valid trajectories found for training")
+        
+        features_array = np.array(features)
+        
+        # Normalize features
+        features_normalized = self.scaler.fit_transform(features_array)
+        
+        # Train all detectors
+        detector_scores = {}
+        for name, detector in self.detectors.items():
+            logger.info(f"Training {name} detector...")
+            detector.fit(features_normalized)
+            detector_scores[name] = detector.decision_scores_
+        
+        # Store decision scores for combination
+        self.decision_scores_ = detector_scores
+        self.is_fitted = True
+        
+        logger.info(f"PyODEnsemble trained on {len(features)} trajectories")
+    
+    def predict(self, trajectory: Trajectory) -> AnomalyResult:
+        """Detect anomalies using PyOD ensemble"""
+        if not self.is_fitted:
+            raise ValueError("Model not fitted. Call fit() first.")
+        
+        if not trajectory.is_valid:
+            return AnomalyResult(
+                trajectory_id=trajectory.track_id,
+                is_anomaly=False,
+                anomaly_score=0.0,
+                confidence=0.0,
+                detection_method="pyod_ensemble",
+                timestamp=datetime.now(),
+                details={"error": "Invalid trajectory"}
+            )
+        
+        # Extract and normalize features
+        trajectory_features = self.analyzer.analyze_trajectory(trajectory)
+        feature_vector = self._extract_feature_vector(trajectory_features)
+        feature_normalized = self.scaler.transform([feature_vector])
+        
+        # Get predictions from all detectors
+        individual_scores = {}
+        individual_predictions = {}
+        
+        for name, detector in self.detectors.items():
+            score = detector.decision_function(feature_normalized)[0]
+            prediction = detector.predict(feature_normalized)[0]
+            individual_scores[name] = float(score)
+            individual_predictions[name] = bool(prediction == 1)
+        
+        # Combine scores using specified method
+        scores_array = np.array(list(individual_scores.values())).reshape(1, -1)
+        
+        if self.combination_method == 'average':
+            combined_score = float(np.mean(scores_array))
+        elif self.combination_method == 'max':
+            combined_score = float(np.max(scores_array))
+        elif self.combination_method == 'aom':
+            combined_score = float(aom(scores_array, n_buckets=3)[0])
+        elif self.combination_method == 'moa':
+            combined_score = float(moa(scores_array, n_buckets=3)[0])
+        else:
+            combined_score = float(np.mean(scores_array))
+        
+        # Determine if anomaly based on combined score and contamination threshold
+        # Use the average threshold from training data
+        avg_threshold = np.mean([
+            np.percentile(scores, (1 - self.contamination) * 100)
+            for scores in self.decision_scores_.values()
+        ])
+        
+        is_anomaly = combined_score > avg_threshold
+        confidence = min(1.0, max(0.0, combined_score / (avg_threshold * 2)))
+        
+        return AnomalyResult(
+            trajectory_id=trajectory.track_id,
+            is_anomaly=is_anomaly,
+            anomaly_score=combined_score,
+            confidence=confidence,
+            detection_method="pyod_ensemble",
+            timestamp=datetime.now(),
+            details={
+                "individual_scores": individual_scores,
+                "individual_predictions": individual_predictions,
+                "combination_method": self.combination_method,
+                "threshold": float(avg_threshold)
+            }
+        )
+    
+    def _extract_feature_vector(self, features: TrajectoryFeatures) -> np.ndarray:
+        """Extract feature vector from TrajectoryFeatures"""
+        return np.array([
+            features.total_distance,
+            features.displacement,
+            features.duration,
+            features.average_speed,
+            features.max_speed,
+            features.path_curvature,
+            features.direction_changes,
+            features.straightness_ratio,
+            features.entry_angle,
+            features.exit_angle,
+            features.bounding_box_area,
+            features.path_complexity,
+            features.acceleration_variance,
+            features.stop_duration,
+            features.movement_consistency
+        ])
+    
+    def save_model(self, path: str) -> None:
+        """Save the trained ensemble model"""
+        if not self.is_fitted:
+            raise ValueError("Model not fitted. Cannot save.")
+        
+        model_data = {
+            'detectors': self.detectors,
+            'scaler': self.scaler,
+            'decision_scores': self.decision_scores_,
+            'contamination': self.contamination,
+            'random_state': self.random_state,
+            'combination_method': self.combination_method
+        }
+        
+        joblib.dump(model_data, path)
+        logger.info(f"PyODEnsemble model saved to {path}")
+    
+    def load_model(self, path: str) -> None:
+        """Load a trained ensemble model"""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Model file not found: {path}")
+        
+        model_data = joblib.load(path)
+        self.detectors = model_data['detectors']
+        self.scaler = model_data['scaler']
+        self.decision_scores_ = model_data['decision_scores']
+        self.contamination = model_data['contamination']
+        self.random_state = model_data['random_state']
+        self.combination_method = model_data['combination_method']
+        self.is_fitted = True
+        
+        logger.info(f"PyODEnsemble model loaded from {path}")
 
 
 class EnsembleDetector(AnomalyDetector):

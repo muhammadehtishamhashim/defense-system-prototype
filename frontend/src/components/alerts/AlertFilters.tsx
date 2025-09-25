@@ -37,6 +37,16 @@ const AlertFilters: React.FC<AlertFiltersProps> = ({ filters, onFilterChange }) 
     onFilterChange({ [key]: value || undefined });
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    // Debounce search to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      onFilterChange({ search: value || undefined });
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  };
+
   const handleDateRangeChange = (startTime?: string, endTime?: string) => {
     onFilterChange({ 
       start_time: startTime || undefined, 
@@ -50,12 +60,13 @@ const AlertFilters: React.FC<AlertFiltersProps> = ({ filters, onFilterChange }) 
       pipeline: undefined,
       status: undefined,
       start_time: undefined,
-      end_time: undefined
+      end_time: undefined,
+      search: undefined
     });
     setSearchTerm('');
   };
 
-  const hasActiveFilters = filters.type || filters.pipeline || filters.status || filters.start_time || filters.end_time;
+  const hasActiveFilters = filters.type || filters.pipeline || filters.status || filters.start_time || filters.end_time || filters.search;
 
   return (
     <div className="bg-white rounded-lg shadow p-4">
@@ -89,7 +100,7 @@ const AlertFilters: React.FC<AlertFiltersProps> = ({ filters, onFilterChange }) 
             type="text"
             placeholder="Search alerts..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>

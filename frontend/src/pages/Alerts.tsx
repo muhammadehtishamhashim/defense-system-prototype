@@ -3,6 +3,7 @@ import type { BaseAlert } from '../types';
 import AlertList from '../components/alerts/AlertList';
 import RealTimeAlertFeed from '../components/alerts/RealTimeAlertFeed';
 import AlertDetail from '../components/alerts/AlertDetail';
+import AlertSummary from '../components/alerts/AlertSummary';
 import Modal from '../components/ui/Modal';
 
 const Alerts = () => {
@@ -32,6 +33,9 @@ const Alerts = () => {
         <p className="text-gray-600">Monitor and manage security alerts from all pipelines</p>
       </div>
 
+      {/* Alert Summary Statistics */}
+      <AlertSummary />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Real-time Alert Feed */}
         <div className="lg:col-span-1">
@@ -39,6 +43,7 @@ const Alerts = () => {
             onAlertSelect={handleAlertSelect}
             maxAlerts={20}
             refreshInterval={5000}
+            useSSE={true}
           />
         </div>
 

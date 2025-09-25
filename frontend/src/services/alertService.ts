@@ -24,6 +24,7 @@ export interface AlertFilters {
   status?: string;
   start_time?: string;
   end_time?: string;
+  search?: string;
   page?: number;
   limit?: number;
 }

@@ -1,5 +1,6 @@
 import { BellIcon, UserCircleIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import Button from '../ui/Button';
+import ConnectionStatus from '../ui/ConnectionStatus';
 
 interface HeaderProps {
   onMobileMenuClick: () => void;
@@ -27,8 +28,11 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
             </h1>
           </div>
           
-          {/* Right side - notifications and user menu */}
+          {/* Right side - connection status, notifications and user menu */}
           <div className="flex items-center space-x-4">
+            {/* Connection Status */}
+            <ConnectionStatus />
+            
             {/* Notifications */}
             <Button variant="ghost" size="sm" className="relative">
               <BellIcon className="h-6 w-6" />

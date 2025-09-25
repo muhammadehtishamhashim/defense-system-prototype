@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { BaseAlert } from '../../types';
 import { alertService } from '../../services/alertService';
+import { sseService } from '../../services/sseService';
 import AlertItem from './AlertItem';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -8,27 +9,32 @@ import {
   PlayIcon, 
   PauseIcon, 
   ArrowPathIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  WifiIcon
 } from '@heroicons/react/24/outline';
 
 interface RealTimeAlertFeedProps {
   onAlertSelect?: (alert: BaseAlert) => void;
   maxAlerts?: number;
   refreshInterval?: number;
+  useSSE?: boolean;
 }
 
 const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({ 
   onAlertSelect, 
   maxAlerts = 50,
-  refreshInterval = 5000 // 5 seconds
+  refreshInterval = 5000, // 5 seconds
+  useSSE = true
 }) => {
   const [alerts, setAlerts] = useState<BaseAlert[]>([]);
   const [isLive, setIsLive] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newAlertCount, setNewAlertCount] = useState(0);
+  const [sseConnected, setSseConnected] = useState(false);
   const intervalRef = useRef<number | null>(null);
   const lastAlertIdRef = useRef<string | null>(null);
+  const sseUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const fetchLatestAlerts = async () => {
     try {
@@ -120,8 +126,11 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
     // Initial fetch
     fetchLatestAlerts();
     
-    // Start polling if live mode is enabled
-    if (isLive) {
+    if (useSSE) {
+      // Setup SSE connection
+      setupSSE();
+    } else if (isLive) {
+      // Start polling if live mode is enabled and not using SSE
       startPolling();
     }
     
@@ -130,8 +139,62 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      if (sseUnsubscribeRef.current) {
+        sseUnsubscribeRef.current();
+      }
     };
-  }, []);
+  }, [useSSE]);
+
+  const setupSSE = async () => {
+    try {
+      if (!sseService.isConnected()) {
+        await sseService.connect();
+      }
+      
+      setSseConnected(true);
+      setError(null);
+      
+      // Subscribe to new alerts
+      sseUnsubscribeRef.current = sseService.onNewAlert((alert: BaseAlert) => {
+        setAlerts(prev => {
+          const newAlerts = [alert, ...prev].slice(0, maxAlerts);
+          return newAlerts;
+        });
+        setNewAlertCount(prev => prev + 1);
+        setLastUpdate(new Date());
+      });
+      
+      // Listen for SSE connection changes
+      const handleSSEConnection = (event: CustomEvent) => {
+        setSseConnected(event.detail.connected);
+        if (!event.detail.connected) {
+          setError('Real-time connection lost, falling back to polling');
+          if (isLive) {
+            startPolling();
+          }
+        } else {
+          setError(null);
+          stopPolling();
+        }
+      };
+      
+      window.addEventListener('sse:connection', handleSSEConnection as EventListener);
+      
+      return () => {
+        window.removeEventListener('sse:connection', handleSSEConnection as EventListener);
+      };
+      
+    } catch (err) {
+      console.error('SSE connection failed:', err);
+      setSseConnected(false);
+      setError('Real-time connection failed, falling back to polling');
+      
+      // Fallback to polling
+      if (isLive) {
+        startPolling();
+      }
+    }
+  };
 
   const getActiveAlertCount = () => {
     return alerts.filter(alert => alert.status === 'active').length;
@@ -149,6 +212,12 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
               <Badge variant={isLive ? 'success' : 'default'}>
                 {isLive ? 'Live' : 'Paused'}
               </Badge>
+              {useSSE && (
+                <Badge variant={sseConnected ? 'success' : 'danger'}>
+                  <WifiIcon className="h-3 w-3 mr-1" />
+                  {sseConnected ? 'Real-time' : 'Polling'}
+                </Badge>
+              )}
               {getActiveAlertCount() > 0 && (
                 <Badge variant="danger">
                   {getActiveAlertCount()} Active

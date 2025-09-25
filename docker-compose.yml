@@ -1,80 +1,48 @@
 version: '3.8'
 
 services:
-  alert-broker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  hifazat-ai:
+    build: .
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:///./hifazat.db
-      - CORS_ORIGINS=http://localhost:3000
+      - PYTHONPATH=/app
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
     volumes:
-      - ./backend:/app
-      - ./media:/app/media
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      - db
-
-  threat-pipeline:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - API_BASE_URL=http://alert-broker:8000
-    volumes:
-      - ./backend:/app
       - ./data:/app/data
-    command: python pipelines/threat_intelligence.py
-    depends_on:
-      - alert-broker
+      - ./logs:/app/logs
+      - ./models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  video-pipeline:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - API_BASE_URL=http://alert-broker:8000
-    volumes:
-      - ./backend:/app
-      - ./media:/app/media
-    command: python pipelines/video_surveillance.py
-    depends_on:
-      - alert-broker
+  # Optional: Add database service
+  # postgres:
+  #   image: postgres:13
+  #   environment:
+  #     POSTGRES_DB: hifazat
+  #     POSTGRES_USER: hifazat
+  #     POSTGRES_PASSWORD: secure_password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
 
-  anomaly-pipeline:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - API_BASE_URL=http://alert-broker:8000
-    volumes:
-      - ./backend:/app
-      - ./media:/app/media
-    command: python pipelines/border_anomaly.py
-    depends_on:
-      - alert-broker
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev
-
-  db:
-    image: alpine:latest
-    volumes:
-      - ./data:/data
-    command: /bin/sh -c "mkdir -p /data && touch /data/hifazat.db"
+  # Optional: Add Redis for caching
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis_data:/data
 
 volumes:
+  # postgres_data:
+  # redis_data:
   data:
-  media:
+  logs:
+  models:

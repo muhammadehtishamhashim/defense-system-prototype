@@ -3,4 +3,5 @@ export { default as AlertItem } from './AlertItem';
 export { default as AlertFilters } from './AlertFilters';
 export { default as AlertDetail } from './AlertDetail';
 export { default as RealTimeAlertFeed } from './RealTimeAlertFeed';
+export { default as AlertSummary } from './AlertSummary';
 export { default as Pagination } from './Pagination';

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { VideoPlayer, SnapshotGallery, VideoTimeline } from '../components/video';
 import { alertService } from '../services/alertService';
 import type { VideoAlert } from '../types';
-import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import { 
   VideoCameraIcon,
@@ -24,7 +23,7 @@ const VideoAnalysis = () => {
   const [videoAlerts, setVideoAlerts] = useState<VideoAlert[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -51,6 +50,7 @@ const VideoAnalysis = () => {
         .filter(alert => alert.pipeline === 'video_surveillance')
         .map(alert => ({
           ...alert,
+          source_pipeline: alert.pipeline,
           event_type: alert.data?.event_type || 'unknown',
           bounding_box: alert.data?.bounding_box || [0, 0, 0, 0],
           track_id: alert.data?.track_id || 0,
@@ -105,7 +105,7 @@ const VideoAnalysis = () => {
       return Math.abs(alertTime - time) < 1;
     });
 
-    return relevantAlerts.map((alert, index) => ({
+    return relevantAlerts.map((alert) => ({
       x: alert.bounding_box?.[0] || 0,
       y: alert.bounding_box?.[1] || 0,
       width: (alert.bounding_box?.[2] || 0) - (alert.bounding_box?.[0] || 0),
@@ -128,6 +128,20 @@ const VideoAnalysis = () => {
   };
 
   const selectedVideoSource = videoSources.find(v => v.id === selectedVideo);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Video Analysis</h2>
+          <p className="text-gray-600">Real-time video surveillance and behavior analysis</p>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Loading video analysis...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

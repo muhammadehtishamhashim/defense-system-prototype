@@ -12,13 +12,15 @@ import { sseService } from './services/sseService';
 
 function App() {
   useEffect(() => {
-    // Initialize connection monitoring
-    startConnectionMonitoring();
+    // Initialize connection monitoring with longer interval (2 minutes)
+    startConnectionMonitoring(120000);
     
-    // Initialize SSE connection
-    sseService.connect().catch(error => {
-      console.warn('SSE connection failed, will use polling fallback:', error);
-    });
+    // Disable SSE auto-connection for now to reduce server load
+    // setTimeout(() => {
+    //   sseService.connect().catch(error => {
+    //     console.warn('SSE connection failed, will use polling fallback:', error);
+    //   });
+    // }, 2000);
     
     // Cleanup on unmount
     return () => {

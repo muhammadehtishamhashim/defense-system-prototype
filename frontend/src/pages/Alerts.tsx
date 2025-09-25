@@ -33,8 +33,8 @@ const Alerts = () => {
         <p className="text-gray-600">Monitor and manage security alerts from all pipelines</p>
       </div>
 
-      {/* Alert Summary Statistics */}
-      <AlertSummary />
+      {/* Alert Summary Statistics - Temporarily disabled to prevent duplicate requests */}
+      {/* <AlertSummary /> */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Real-time Alert Feed */}
@@ -42,8 +42,8 @@ const Alerts = () => {
           <RealTimeAlertFeed 
             onAlertSelect={handleAlertSelect}
             maxAlerts={20}
-            refreshInterval={5000}
-            useSSE={true}
+            refreshInterval={60000}
+            useSSE={false}
           />
         </div>
 

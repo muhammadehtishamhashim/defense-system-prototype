@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import Button from '../ui/Button';
-import { 
+import {
   ChartBarIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
+import { dataService } from '../../services/dataService';
 
 interface MetricDataPoint {
   timestamp: string;
@@ -30,24 +31,25 @@ interface PerformanceMetricsProps {
 }
 
 const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
-  refreshInterval = 30000
+  refreshInterval = 60000
 }) => {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'1h' | '6h' | '24h' | '7d'>('1h');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Generate mock data
   const generateMockData = (baseValue: number, points: number = 20) => {
     const data: MetricDataPoint[] = [];
     const now = new Date();
-    
+
     for (let i = points - 1; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - i * 60000).toISOString(); // 1 minute intervals
       const variation = (Math.random() - 0.5) * 0.2 * baseValue;
       const value = Math.max(0, baseValue + variation);
       data.push({ timestamp, value });
     }
-    
+
     return data;
   };
 
@@ -102,24 +104,111 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
     }
   ];
 
-  useEffect(() => {
-    const fetchMetrics = () => {
-      setLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        setMetrics(mockMetrics);
-        setLoading(false);
-      }, 500);
-    };
+  const fetchMetrics = async () => {
+    try {
+      // Only show loading if we don't have any metrics yet
+      if (metrics.length === 0) {
+        setLoading(true);
+      }
+      setError(null);
 
+      const systemData = await dataService.getSystemMetrics();
+
+      // Convert API data to metrics format
+      const metricsArray: PerformanceMetric[] = [];
+
+      // Calculate overall processing rate
+      const totalProcessingRate = Object.values(systemData.pipelines || {}).reduce(
+        (sum: number, pipeline: any) => sum + (pipeline.processing_rate || 0), 0
+      );
+
+      // Calculate average accuracy
+      const accuracyScores = Object.values(systemData.pipelines || {})
+        .map((pipeline: any) => pipeline.accuracy_score || 0)
+        .filter(score => score > 0);
+      const avgAccuracy = accuracyScores.length > 0
+        ? accuracyScores.reduce((sum, score) => sum + score, 0) / accuracyScores.length * 100
+        : 0;
+
+      // Count active pipelines
+      const activePipelines = Object.values(systemData.pipelines || {})
+        .filter((pipeline: any) => pipeline.status === 'online').length;
+
+      // Count total errors
+      const totalErrors = Object.values(systemData.pipelines || {}).reduce(
+        (sum: number, pipeline: any) => sum + (pipeline.error_count || 0), 0
+      );
+
+      metricsArray.push(
+        {
+          name: 'Alert Processing Rate',
+          current: totalProcessingRate,
+          previous: totalProcessingRate * 0.95, // Mock previous value
+          unit: 'alerts/min',
+          data: generateMockData(totalProcessingRate),
+          threshold: { warning: 10, critical: 5 }
+        },
+        {
+          name: 'Detection Accuracy',
+          current: avgAccuracy,
+          previous: avgAccuracy * 0.98, // Mock previous value
+          unit: '%',
+          data: generateMockData(avgAccuracy),
+          threshold: { warning: 80, critical: 70 }
+        },
+        {
+          name: 'Active Pipelines',
+          current: activePipelines,
+          previous: activePipelines, // Mock previous value
+          unit: 'pipelines',
+          data: generateMockData(activePipelines),
+          threshold: { warning: 2, critical: 1 }
+        },
+        {
+          name: 'Total Alerts Today',
+          current: systemData.alerts_today || 0,
+          previous: (systemData.alerts_today || 0) * 0.9, // Mock previous value
+          unit: 'alerts',
+          data: generateMockData(systemData.alerts_today || 0)
+        },
+        {
+          name: 'System Uptime',
+          current: parseFloat(systemData.uptime?.replace('%', '') || '0'),
+          previous: 99.5, // Mock previous value
+          unit: '%',
+          data: generateMockData(parseFloat(systemData.uptime?.replace('%', '') || '0')),
+          threshold: { warning: 95, critical: 90 }
+        },
+        {
+          name: 'Error Count',
+          current: totalErrors,
+          previous: totalErrors * 1.2, // Mock previous value
+          unit: 'errors',
+          data: generateMockData(totalErrors),
+          threshold: { warning: 5, critical: 10 }
+        }
+      );
+
+      setMetrics(metricsArray);
+    } catch (err) {
+      console.error('Failed to fetch metrics:', err);
+      setError('Failed to load performance metrics');
+      // Fallback to mock data on error
+      setMetrics(mockMetrics);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchMetrics();
     const interval = setInterval(fetchMetrics, refreshInterval);
     return () => clearInterval(interval);
-  }, [refreshInterval, selectedTimeRange]);
+  }, [refreshInterval]); // Removed selectedTimeRange dependency
 
   const getMetricStatus = (metric: PerformanceMetric) => {
     if (!metric.threshold) return 'normal';
-    
+
     if (metric.current >= metric.threshold.critical) return 'critical';
     if (metric.current >= metric.threshold.warning) return 'warning';
     return 'normal';
@@ -181,6 +270,24 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
     );
   };
 
+  if (loading && metrics.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <ChartBarIcon className="h-5 w-5" />
+            <span>Performance Metrics</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-32">
+            <div className="text-gray-500">Loading metrics...</div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -189,7 +296,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
             <ChartBarIcon className="h-5 w-5" />
             <span>Performance Metrics</span>
           </CardTitle>
-          
+
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1">
               {(['1h', '6h', '24h', '7d'] as const).map(range => (
@@ -206,13 +313,18 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {metrics.map(metric => {
             const status = getMetricStatus(metric);
             const statusColor = getStatusColor(status);
-            
+
             return (
               <div
                 key={metric.name}
@@ -222,7 +334,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
                   <h3 className="font-medium text-sm">{metric.name}</h3>
                   {getTrendIcon(metric.current, metric.previous)}
                 </div>
-                
+
                 <div className="flex items-baseline space-x-2 mb-2">
                   <span className="text-2xl font-bold">
                     {formatValue(metric.current, metric.unit)}
@@ -232,11 +344,11 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
                     {formatValue(metric.current - metric.previous, metric.unit)}
                   </span>
                 </div>
-                
+
                 <div className="mb-3">
                   {renderMiniChart(metric.data)}
                 </div>
-                
+
                 {metric.threshold && (
                   <div className="text-xs text-gray-600">
                     <div className="flex justify-between">
@@ -249,14 +361,14 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
             );
           })}
         </div>
-        
+
         {/* Summary Statistics */}
         <div className="mt-6 pt-6 border-t border-gray-200">
           <h3 className="font-medium text-gray-900 mb-4 flex items-center space-x-2">
             <ClockIcon className="h-4 w-4" />
             <span>System Summary</span>
           </h3>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
@@ -264,21 +376,21 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
               </div>
               <div className="text-gray-600">Healthy Metrics</div>
             </div>
-            
+
             <div className="text-center">
               <div className="text-2xl font-bold text-yellow-600">
                 {metrics.filter(m => getMetricStatus(m) === 'warning').length}
               </div>
               <div className="text-gray-600">Warning Metrics</div>
             </div>
-            
+
             <div className="text-center">
               <div className="text-2xl font-bold text-red-600">
                 {metrics.filter(m => getMetricStatus(m) === 'critical').length}
               </div>
               <div className="text-gray-600">Critical Metrics</div>
             </div>
-            
+
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
                 {Math.round(metrics.reduce((acc, m) => acc + (m.current > m.previous ? 1 : 0), 0) / metrics.length * 100)}%

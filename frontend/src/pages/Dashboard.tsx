@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
@@ -39,7 +39,7 @@ const Dashboard = () => {
       </div>
 
       {/* Alert Summary */}
-      <AlertSummary key={`alerts-${refreshKey}`} />
+      <AlertSummary />
 
       {/* System Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -89,10 +89,10 @@ const Dashboard = () => {
       </div>
 
       {/* Pipeline Status */}
-      <PipelineStatus key={`pipeline-${refreshKey}`} onRefresh={handleRefresh} />
+      <PipelineStatus onRefresh={handleRefresh} />
 
       {/* Performance Metrics */}
-      <PerformanceMetrics key={`metrics-${refreshKey}`} />
+      <PerformanceMetrics />
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

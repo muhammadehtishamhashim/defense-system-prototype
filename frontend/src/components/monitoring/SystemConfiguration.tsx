@@ -5,7 +5,6 @@ import Badge from '../ui/Badge';
 import { 
   CogIcon,
   CheckIcon,
-  XMarkIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
@@ -223,7 +222,7 @@ const SystemConfiguration: React.FC<SystemConfigurationProps> = ({
   };
 
   const renderSettingInput = (setting: ConfigurationSetting) => {
-    const isModified = modifiedSettings.has(setting.key);
+    // const isModified = modifiedSettings.has(setting.key);
     
     switch (setting.type) {
       case 'boolean':

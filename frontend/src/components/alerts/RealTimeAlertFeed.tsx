@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { BaseAlert } from '../../types';
-import { alertService } from '../../services/alertService';
+import { dataService } from '../../services/dataService';
 import { sseService } from '../../services/sseService';
 import AlertItem from './AlertItem';
 import Badge from '../ui/Badge';
@@ -23,7 +23,7 @@ interface RealTimeAlertFeedProps {
 const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({ 
   onAlertSelect, 
   maxAlerts = 50,
-  refreshInterval = 5000, // 5 seconds
+  refreshInterval = 60000, // 60 seconds
   useSSE = true
 }) => {
   const [alerts, setAlerts] = useState<BaseAlert[]>([]);
@@ -39,10 +39,7 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
   const fetchLatestAlerts = async () => {
     try {
       setError(null);
-      const response = await alertService.getAlerts({
-        limit: maxAlerts,
-        page: 1
-      });
+      const response = await dataService.getAllAlerts();
       
       // Transform the response to match our types
       const transformedAlerts = response.alerts.map(alert => ({
@@ -110,7 +107,10 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
 
   const handleStatusUpdate = async (alertId: string, status: BaseAlert['status']) => {
     try {
+      const { alertService } = await import('../../services/alertService');
       await alertService.updateAlertStatus(alertId, status);
+      // Clear cache to force refresh
+      dataService.clearCache();
       // Update the local state
       setAlerts(prev => 
         prev.map(alert => 
@@ -123,15 +123,16 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
   };
 
   useEffect(() => {
-    // Initial fetch
-    fetchLatestAlerts();
+    // Disable initial fetch to reduce requests
+    // fetchLatestAlerts();
     
     if (useSSE) {
       // Setup SSE connection
       setupSSE();
     } else if (isLive) {
       // Start polling if live mode is enabled and not using SSE
-      startPolling();
+      // Temporarily disable auto-polling
+      // startPolling();
     }
     
     // Cleanup on unmount

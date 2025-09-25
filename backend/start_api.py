@@ -18,6 +18,14 @@ def main():
         create_tables()
         logger.info("Database initialized successfully")
         
+        # Initialize system metrics if needed
+        try:
+            from init_system_metrics import init_system_metrics
+            init_system_metrics()
+        except Exception as e:
+            logger.warning(f"Could not initialize system metrics: {str(e)}")
+            # Continue anyway as this is not critical
+        
         # Start API server
         logger.info("Starting HifazatAI Alert Broker API...")
         uvicorn.run(

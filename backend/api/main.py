@@ -9,8 +9,11 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
+import asyncio
+import json
+from typing import AsyncGenerator
 
 from models.alerts import (
     ThreatAlert, VideoAlert, AnomalyAlert, BaseAlert,
@@ -427,6 +430,123 @@ async def get_pipeline_metrics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve metrics: {str(e)}"
+        )
+
+
+# Server-Sent Events endpoint
+@app.get("/events")
+async def stream_events():
+    """Server-Sent Events endpoint for real-time updates"""
+    
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events"""
+        try:
+            # Send initial connection confirmation
+            initial_data = {
+                "type": "connection",
+                "data": {"status": "connected", "timestamp": datetime.now().isoformat()},
+                "timestamp": datetime.now().isoformat()
+            }
+            yield f"data: {json.dumps(initial_data)}\n\n"
+            
+            # Send heartbeat every 60 seconds (reduced frequency)
+            while True:
+                try:
+                    heartbeat_data = {
+                        "type": "heartbeat",
+                        "data": {"timestamp": datetime.now().isoformat()},
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                    
+                    # Wait before next heartbeat
+                    await asyncio.sleep(60)
+                    
+                except asyncio.CancelledError:
+                    logger.info("SSE connection cancelled by client")
+                    break
+                except Exception as e:
+                    logger.error(f"SSE error in heartbeat: {str(e)}")
+                    # Send error message before closing
+                    error_data = {
+                        "type": "error",
+                        "data": {"message": "Connection error", "timestamp": datetime.now().isoformat()},
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    try:
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                    except:
+                        pass
+                    break
+                    
+        except Exception as e:
+            logger.error(f"SSE generator error: {str(e)}")
+            return
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
+
+# System metrics endpoint
+@app.get("/system/metrics", response_model=dict)
+async def get_system_metrics(db: Session = Depends(get_db)):
+    """Get current system metrics"""
+    try:
+        # Get latest metrics for each pipeline
+        pipelines = ["threat_intelligence", "video_surveillance", "border_anomaly"]
+        metrics_data = {}
+        
+        for pipeline in pipelines:
+            db_metrics = db_manager.get_latest_metrics(db, pipeline)
+            if db_metrics:
+                metrics_data[pipeline] = {
+                    "processing_rate": db_metrics.processing_rate,
+                    "accuracy_score": db_metrics.accuracy_score,
+                    "status": db_metrics.status,
+                    "error_count": db_metrics.error_count,
+                    "last_update": db_metrics.timestamp.isoformat()
+                }
+            else:
+                # Provide default values if no metrics exist
+                metrics_data[pipeline] = {
+                    "processing_rate": 0.0,
+                    "accuracy_score": 0.0,
+                    "status": "offline",
+                    "error_count": 0,
+                    "last_update": datetime.now().isoformat()
+                }
+        
+        # Calculate system-wide metrics
+        total_alerts = db_manager.count_alerts(db)
+        recent_alerts = db_manager.count_alerts(
+            db, 
+            start_time=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+        
+        return {
+            "system_status": "healthy",
+            "total_alerts": total_alerts,
+            "alerts_today": recent_alerts,
+            "pipelines": metrics_data,
+            "uptime": "99.8%",  # Mock uptime
+            "last_updated": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving system metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve system metrics: {str(e)}"
         )
 
 

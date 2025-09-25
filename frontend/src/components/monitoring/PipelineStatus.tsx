@@ -31,7 +31,7 @@ interface PipelineStatusProps {
 
 const PipelineStatus: React.FC<PipelineStatusProps> = ({
   onRefresh,
-  refreshInterval = 30000 // 30 seconds
+  refreshInterval = 60000 // 60 seconds
 }) => {
   const [pipelines, setPipelines] = useState<PipelineMetrics[]>([]);
   const [loading, setLoading] = useState(true);

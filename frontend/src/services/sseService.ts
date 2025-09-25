@@ -31,8 +31,8 @@ export interface SystemStatusMessage extends SSEMessage {
 class SSEService {
   private eventSource: EventSource | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
+  private maxReconnectAttempts = 3;
+  private reconnectDelay = 5000;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
   private url: string;
   private connected = false;
@@ -163,17 +163,20 @@ class SSEService {
   private handleReconnect(): void {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      const delay = this.reconnectDelay * this.reconnectAttempts; // Linear backoff instead of exponential
       
       console.log(`Attempting to reconnect SSE in ${delay}ms (attempt ${this.reconnectAttempts})`);
       
       setTimeout(() => {
         this.connect().catch(error => {
           console.error('SSE reconnection failed:', error);
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.warn('SSE reconnection disabled after max attempts. Manual reconnection required.');
+          }
         });
       }, delay);
     } else {
-      console.error('Max SSE reconnection attempts reached');
+      console.error('Max SSE reconnection attempts reached. SSE connection disabled.');
     }
   }
 

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { checkAPIHealth, getConnectionStatus } from '../../services/api';
+import { checkAPIHealth } from '../../services/api';
 import { sseService } from '../../services/sseService';
 import Badge from './Badge';
-import { 
+import {
   WifiIcon,
-  ExclamationTriangleIcon,
   CheckCircleIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
@@ -14,9 +13,9 @@ interface ConnectionStatusProps {
   className?: string;
 }
 
-const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ 
-  showDetails = false, 
-  className = '' 
+const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
+  showDetails = false,
+  className = ''
 }) => {
   const [apiConnected, setApiConnected] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
@@ -40,7 +39,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
     window.addEventListener('sse:connection', handleSSEConnection as EventListener);
 
     // Periodic status check
-    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
+    const interval = setInterval(checkStatus, 60000); // Check every 60 seconds
 
     return () => {
       window.removeEventListener('api:connection', handleAPIConnection as EventListener);
@@ -56,51 +55,33 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
     setLastCheck(new Date());
   };
 
-  const getOverallStatus = () => {
-    if (apiConnected && sseConnected) return 'connected';
-    if (apiConnected && !sseConnected) return 'partial';
-    return 'disconnected';
-  };
+
 
   const getStatusIcon = () => {
-    const status = getOverallStatus();
-    switch (status) {
-      case 'connected':
-        return <CheckCircleIcon className="h-4 w-4 text-green-500" />;
-      case 'partial':
-        return <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />;
-      case 'disconnected':
-        return <XCircleIcon className="h-4 w-4 text-red-500" />;
-      default:
-        return <WifiIcon className="h-4 w-4 text-gray-500" />;
+    if (apiConnected) {
+      return <CheckCircleIcon className="h-4 w-4 text-green-500" />;
+    } else {
+      return <XCircleIcon className="h-4 w-4 text-red-500" />;
     }
   };
 
   const getStatusBadge = () => {
-    const status = getOverallStatus();
-    switch (status) {
-      case 'connected':
-        return <Badge variant="success">Connected</Badge>;
-      case 'partial':
-        return <Badge variant="warning">Partial</Badge>;
-      case 'disconnected':
-        return <Badge variant="danger">Disconnected</Badge>;
-      default:
-        return <Badge variant="default">Unknown</Badge>;
+    if (apiConnected && sseConnected) {
+      return <Badge variant="success">Connected</Badge>;
+    } else if (apiConnected && !sseConnected) {
+      return <Badge variant="success">Connected</Badge>;
+    } else {
+      return <Badge variant="danger">Disconnected</Badge>;
     }
   };
 
   const getStatusMessage = () => {
-    const status = getOverallStatus();
-    switch (status) {
-      case 'connected':
-        return 'All services connected';
-      case 'partial':
-        return 'API connected, real-time updates unavailable';
-      case 'disconnected':
-        return 'Connection lost - check network';
-      default:
-        return 'Checking connection...';
+    if (apiConnected && sseConnected) {
+      return 'All services connected';
+    } else if (apiConnected && !sseConnected) {
+      return 'API connected, using polling mode';
+    } else {
+      return 'Connection lost - check network';
     }
   };
 

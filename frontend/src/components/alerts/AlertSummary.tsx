@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { alertService } from '../../services/alertService';
+import { dataService } from '../../services/dataService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import Badge from '../ui/Badge';
 import LoadingSpinner from '../ui/LoadingSpinner';
@@ -34,16 +34,18 @@ const AlertSummary: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      setLoading(true);
+      // Only show loading if we don't have stats yet
+      if (!stats) {
+        setLoading(true);
+      }
       setError(null);
 
-      // Fetch all alerts to calculate statistics
-      // In a real implementation, this would be a dedicated stats endpoint
+      // Fetch all alerts to calculate statistics using cached data service
       const [allAlerts, activeAlerts, reviewedAlerts, dismissedAlerts] = await Promise.all([
-        alertService.getAlerts({ limit: 1000 }),
-        alertService.getAlerts({ status: 'active', limit: 1000 }),
-        alertService.getAlerts({ status: 'reviewed', limit: 1000 }),
-        alertService.getAlerts({ status: 'dismissed', limit: 1000 })
+        dataService.getAllAlerts(),
+        dataService.getActiveAlerts(),
+        dataService.getReviewedAlerts(),
+        dataService.getDismissedAlerts()
       ]);
 
       // Calculate pipeline statistics
@@ -85,8 +87,8 @@ const AlertSummary: React.FC = () => {
   useEffect(() => {
     fetchStats();
     
-    // Refresh stats every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
+    // Refresh stats every 60 seconds
+    const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
   }, []);
 

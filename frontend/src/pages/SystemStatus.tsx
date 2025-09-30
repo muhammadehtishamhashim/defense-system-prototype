@@ -13,7 +13,7 @@ const SystemStatus = () => {
           <CardTitle>System Monitoring Dashboard</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-600">System monitoring dashboard will be implemented in task 6.4</p>
+          <p className="text-gray-600">It is a prototype. So we currently don't need system status</p>
         </CardContent>
       </Card>
     </div>

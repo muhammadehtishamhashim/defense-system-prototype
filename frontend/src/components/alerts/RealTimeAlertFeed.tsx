@@ -32,7 +32,7 @@ const RealTimeAlertFeed: React.FC<RealTimeAlertFeedProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [newAlertCount, setNewAlertCount] = useState(0);
   const [sseConnected, setSseConnected] = useState(false);
-  const intervalRef = useRef<number | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastAlertIdRef = useRef<string | null>(null);
   const sseUnsubscribeRef = useRef<(() => void) | null>(null);
 

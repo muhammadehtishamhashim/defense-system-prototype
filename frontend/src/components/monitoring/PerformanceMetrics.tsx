@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import Button from '../ui/Button';
 import {
@@ -7,7 +7,7 @@ import {
   ArrowTrendingDownIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { dataService } from '../../services/dataService';
+import { useSystemMetrics } from '../../contexts/SystemMetricsContext';
 
 interface MetricDataPoint {
   timestamp: string;
@@ -30,36 +30,42 @@ interface PerformanceMetricsProps {
   refreshInterval?: number;
 }
 
-const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
-  refreshInterval = 60000
-}) => {
+const PerformanceMetrics: React.FC<PerformanceMetricsProps> = () => {
+  const { data: systemData, loading, error } = useSystemMetrics();
   const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'1h' | '6h' | '24h' | '7d'>('1h');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Generate mock data
-  const generateMockData = (baseValue: number, points: number = 20) => {
+  // Generate mock data with stable seed to prevent flickering
+  const generateMockData = useCallback((baseValue: number, points: number = 20, seed: string = '') => {
     const data: MetricDataPoint[] = [];
     const now = new Date();
 
+    // Use a simple hash of the seed to create consistent "random" values
+    const hashSeed = seed.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+
     for (let i = points - 1; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - i * 60000).toISOString(); // 1 minute intervals
-      const variation = (Math.random() - 0.5) * 0.2 * baseValue;
+      // Use seeded pseudo-random for consistent values
+      const pseudoRandom = Math.sin(hashSeed + i) * 0.5;
+      const variation = pseudoRandom * 0.2 * baseValue;
       const value = Math.max(0, baseValue + variation);
       data.push({ timestamp, value });
     }
 
     return data;
-  };
+  }, []);
 
-  const mockMetrics: PerformanceMetric[] = [
+  // Memoize mock metrics to prevent regeneration
+  const mockMetrics: PerformanceMetric[] = useMemo(() => [
     {
       name: 'Alert Processing Rate',
       current: 15.2,
       previous: 14.8,
       unit: 'alerts/min',
-      data: generateMockData(15),
+      data: generateMockData(15, 20, 'alert-processing'),
       threshold: { warning: 10, critical: 5 }
     },
     {
@@ -67,7 +73,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
       current: 87.3,
       previous: 86.1,
       unit: '%',
-      data: generateMockData(87),
+      data: generateMockData(87, 20, 'detection-accuracy'),
       threshold: { warning: 80, critical: 70 }
     },
     {
@@ -75,7 +81,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
       current: 1.2,
       previous: 1.5,
       unit: 'seconds',
-      data: generateMockData(1.2),
+      data: generateMockData(1.2, 20, 'response-time'),
       threshold: { warning: 2, critical: 5 }
     },
     {
@@ -83,7 +89,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
       current: 45.6,
       previous: 48.2,
       unit: '%',
-      data: generateMockData(45),
+      data: generateMockData(45, 20, 'system-load'),
       threshold: { warning: 70, critical: 90 }
     },
     {
@@ -91,7 +97,7 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
       current: 62.1,
       previous: 59.8,
       unit: '%',
-      data: generateMockData(62),
+      data: generateMockData(62, 20, 'memory-usage'),
       threshold: { warning: 80, critical: 95 }
     },
     {
@@ -99,112 +105,108 @@ const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
       current: 0.3,
       previous: 0.5,
       unit: '%',
-      data: generateMockData(0.3),
+      data: generateMockData(0.3, 20, 'error-rate'),
       threshold: { warning: 1, critical: 5 }
     }
-  ];
+  ], [generateMockData]);
 
-  const fetchMetrics = async () => {
-    try {
-      // Only show loading if we don't have any metrics yet
-      if (metrics.length === 0) {
-        setLoading(true);
-      }
-      setError(null);
+  // Create stable chart data that doesn't regenerate
+  const stableChartData = useMemo(() => ({
+    'Alert Processing Rate': generateMockData(36.6, 20, 'api-alert-processing'),
+    'Detection Accuracy': generateMockData(85.27, 20, 'api-detection-accuracy'),
+    'Active Pipelines': generateMockData(3, 20, 'api-active-pipelines'),
+    'Total Alerts Today': generateMockData(0, 20, 'api-alerts-today'),
+    'System Uptime': generateMockData(99.8, 20, 'api-uptime'),
+    'Error Count': generateMockData(1, 20, 'api-error-count')
+  }), [generateMockData]);
 
-      const systemData = await dataService.getSystemMetrics();
-
-      // Convert API data to metrics format
-      const metricsArray: PerformanceMetric[] = [];
-
-      // Calculate overall processing rate
-      const totalProcessingRate = Object.values(systemData.pipelines || {}).reduce(
-        (sum: number, pipeline: any) => sum + (pipeline.processing_rate || 0), 0
-      );
-
-      // Calculate average accuracy
-      const accuracyScores = Object.values(systemData.pipelines || {})
-        .map((pipeline: any) => pipeline.accuracy_score || 0)
-        .filter(score => score > 0);
-      const avgAccuracy = accuracyScores.length > 0
-        ? accuracyScores.reduce((sum, score) => sum + score, 0) / accuracyScores.length * 100
-        : 0;
-
-      // Count active pipelines
-      const activePipelines = Object.values(systemData.pipelines || {})
-        .filter((pipeline: any) => pipeline.status === 'online').length;
-
-      // Count total errors
-      const totalErrors = Object.values(systemData.pipelines || {}).reduce(
-        (sum: number, pipeline: any) => sum + (pipeline.error_count || 0), 0
-      );
-
-      metricsArray.push(
-        {
-          name: 'Alert Processing Rate',
-          current: totalProcessingRate,
-          previous: totalProcessingRate * 0.95, // Mock previous value
-          unit: 'alerts/min',
-          data: generateMockData(totalProcessingRate),
-          threshold: { warning: 10, critical: 5 }
-        },
-        {
-          name: 'Detection Accuracy',
-          current: avgAccuracy,
-          previous: avgAccuracy * 0.98, // Mock previous value
-          unit: '%',
-          data: generateMockData(avgAccuracy),
-          threshold: { warning: 80, critical: 70 }
-        },
-        {
-          name: 'Active Pipelines',
-          current: activePipelines,
-          previous: activePipelines, // Mock previous value
-          unit: 'pipelines',
-          data: generateMockData(activePipelines),
-          threshold: { warning: 2, critical: 1 }
-        },
-        {
-          name: 'Total Alerts Today',
-          current: systemData.alerts_today || 0,
-          previous: (systemData.alerts_today || 0) * 0.9, // Mock previous value
-          unit: 'alerts',
-          data: generateMockData(systemData.alerts_today || 0)
-        },
-        {
-          name: 'System Uptime',
-          current: parseFloat(systemData.uptime?.replace('%', '') || '0'),
-          previous: 99.5, // Mock previous value
-          unit: '%',
-          data: generateMockData(parseFloat(systemData.uptime?.replace('%', '') || '0')),
-          threshold: { warning: 95, critical: 90 }
-        },
-        {
-          name: 'Error Count',
-          current: totalErrors,
-          previous: totalErrors * 1.2, // Mock previous value
-          unit: 'errors',
-          data: generateMockData(totalErrors),
-          threshold: { warning: 5, critical: 10 }
-        }
-      );
-
-      setMetrics(metricsArray);
-    } catch (err) {
-      console.error('Failed to fetch metrics:', err);
-      setError('Failed to load performance metrics');
-      // Fallback to mock data on error
+  const processMetrics = useCallback(() => {
+    if (!systemData) {
       setMetrics(mockMetrics);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    // Convert API data to metrics format
+    const metricsArray: PerformanceMetric[] = [];
+
+    // Calculate overall processing rate
+    const totalProcessingRate = Object.values(systemData.pipelines || {}).reduce(
+      (sum: number, pipeline: any) => sum + (pipeline.processing_rate || 0), 0
+    );
+
+    // Calculate average accuracy
+    const accuracyScores = Object.values(systemData.pipelines || {})
+      .map((pipeline: any) => pipeline.accuracy_score || 0)
+      .filter(score => score > 0);
+    const avgAccuracy = accuracyScores.length > 0
+      ? accuracyScores.reduce((sum, score) => sum + score, 0) / accuracyScores.length
+      : 0;
+
+    // Count active pipelines
+    const activePipelines = Object.values(systemData.pipelines || {})
+      .filter((pipeline: any) => pipeline.status === 'online' || pipeline.status === 'healthy').length;
+
+    // Count total errors
+    const totalErrors = Object.values(systemData.pipelines || {}).reduce(
+      (sum: number, pipeline: any) => sum + (pipeline.error_count || 0), 0
+    );
+
+    metricsArray.push(
+      {
+        name: 'Alert Processing Rate',
+        current: totalProcessingRate,
+        previous: totalProcessingRate * 0.95, // Mock previous value
+        unit: 'alerts/min',
+        data: stableChartData['Alert Processing Rate'],
+        threshold: { warning: 10, critical: 5 }
+      },
+      {
+        name: 'Detection Accuracy',
+        current: avgAccuracy,
+        previous: avgAccuracy * 0.98, // Mock previous value
+        unit: '%',
+        data: stableChartData['Detection Accuracy'],
+        threshold: { warning: 80, critical: 70 }
+      },
+      {
+        name: 'Active Pipelines',
+        current: activePipelines,
+        previous: activePipelines, // Mock previous value
+        unit: 'pipelines',
+        data: stableChartData['Active Pipelines'],
+        threshold: { warning: 2, critical: 1 }
+      },
+      {
+        name: 'Total Alerts Today',
+        current: systemData.alerts_today || 0,
+        previous: (systemData.alerts_today || 0) * 0.9, // Mock previous value
+        unit: 'alerts',
+        data: stableChartData['Total Alerts Today']
+      },
+      {
+        name: 'System Uptime',
+        current: parseFloat(systemData.uptime?.replace('%', '') || '99.8'),
+        previous: 99.5, // Mock previous value
+        unit: '%',
+        data: stableChartData['System Uptime'],
+        threshold: { warning: 95, critical: 90 }
+      },
+      {
+        name: 'Error Count',
+        current: totalErrors,
+        previous: totalErrors * 1.2, // Mock previous value
+        unit: 'errors',
+        data: stableChartData['Error Count'],
+        threshold: { warning: 5, critical: 10 }
+      }
+    );
+
+    setMetrics(metricsArray);
+  }, [systemData, stableChartData, mockMetrics]);
 
   useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval]); // Removed selectedTimeRange dependency
+    processMetrics();
+  }, [processMetrics]);
 
   const getMetricStatus = (metric: PerformanceMetric) => {
     if (!metric.threshold) return 'normal';

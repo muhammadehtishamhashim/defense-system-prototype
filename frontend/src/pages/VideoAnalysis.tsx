@@ -2,45 +2,156 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { VideoPlayer, SnapshotGallery, VideoTimeline } from '../components/video';
 import { alertService } from '../services/alertService';
-import type { VideoAlert } from '../types';
+import { useVideoAnalysis } from '../hooks/useVideoAnalysis';
+import { sseService } from '../services/sseService';
+import type { VideoAlert, BaseAlert } from '../types';
 import Badge from '../components/ui/Badge';
+import Button from '../components/ui/Button';
 import { 
   VideoCameraIcon,
   PhotoIcon,
   ClockIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  PlayIcon,
+  StopIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
-interface VideoSource {
-  id: string;
-  name: string;
-  url: string;
-  status: 'online' | 'offline' | 'error';
-}
-
 const VideoAnalysis = () => {
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const {
+    videos,
+    selectedVideo,
+    videoStreamUrl,
+    analysisSession,
+    analysisStatus,
+    loading,
+    error,
+    selectVideo,
+    startAnalysis,
+    stopAnalysis,
+    loadVideos
+  } = useVideoAnalysis();
+
   const [videoAlerts, setVideoAlerts] = useState<VideoAlert[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // Mock video sources - in real implementation, these would come from API
-  const videoSources: VideoSource[] = [
-    { id: '1', name: 'Camera 1 - Main Entrance', url: '/demo-video-1.mp4', status: 'online' },
-    { id: '2', name: 'Camera 2 - Parking Lot', url: '/demo-video-2.mp4', status: 'online' },
-    { id: '3', name: 'Camera 3 - Perimeter', url: '/demo-video-3.mp4', status: 'offline' },
-  ];
+  const [realtimeAlerts, setRealtimeAlerts] = useState<BaseAlert[]>([]);
+  const [sseConnected, setSseConnected] = useState(false);
 
   useEffect(() => {
     fetchVideoAlerts();
+    setupSSEConnection();
   }, []);
+
+  const setupSSEConnection = async () => {
+    try {
+      if (!sseService.isConnected()) {
+        await sseService.connect();
+      }
+      setSseConnected(true);
+      
+      // Subscribe to new alerts
+      sseService.onNewAlert((alert: BaseAlert) => {
+        console.log('Received real-time alert via onNewAlert:', alert);
+        
+        // Add to real-time alerts for display
+        setRealtimeAlerts(prev => [alert, ...prev].slice(0, 10));
+        
+        // Convert to VideoAlert and add to videoAlerts for statistics
+        if (alert.source_pipeline === 'video_surveillance') {
+          const videoAlert = {
+            ...alert,
+            event_type: (alert as any).event_type || 'unknown',
+            bounding_box: (alert as any).bounding_box || [0, 0, 0, 0],
+            track_id: (alert as any).track_id || 0,
+            snapshot_path: (alert as any).snapshot_path || '',
+            video_timestamp: (alert as any).video_timestamp || 0
+          } as VideoAlert;
+          
+          setVideoAlerts(prev => [videoAlert, ...prev].slice(0, 50));
+          
+          // Generate snapshot from alert
+          const snapshotPath = (alert as any).snapshot_path || '';
+          const snapshotUrl = snapshotPath ? `http://localhost:8000/${snapshotPath}` : '/placeholder-snapshot.jpg';
+          
+          const snapshot = {
+            id: alert.id,
+            url: snapshotUrl,
+            timestamp: new Date(alert.timestamp).getTime() / 1000,
+            description: `${(alert as any).event_type || 'unknown'} detection - Track ${(alert as any).track_id || 0}`,
+            boundingBoxes: (alert as any).bounding_box ? [{
+              x: (alert as any).bounding_box[0],
+              y: (alert as any).bounding_box[1],
+              width: (alert as any).bounding_box[2] - (alert as any).bounding_box[0],
+              height: (alert as any).bounding_box[3] - (alert as any).bounding_box[1],
+              label: (alert as any).event_type || 'unknown',
+              confidence: alert.confidence
+            }] : []
+          };
+          
+          setSnapshots(prev => [snapshot, ...prev].slice(0, 20));
+        }
+      });
+      
+      // Also subscribe to all events for debugging
+      sseService.onAnyEvent((message: any) => {
+        console.log('Received SSE message:', message);
+        if (message.type === 'alert' && message.data.source_pipeline === 'video_surveillance') {
+          console.log('Video alert received via onAnyEvent:', message.data);
+          
+          // Add to real-time alerts for display
+          setRealtimeAlerts(prev => [message.data, ...prev].slice(0, 10));
+          
+          // Convert to VideoAlert and add to videoAlerts for statistics
+          const videoAlert = {
+            ...message.data,
+            event_type: message.data.event_type || 'unknown',
+            bounding_box: message.data.bounding_box || [0, 0, 0, 0],
+            track_id: message.data.track_id || 0,
+            snapshot_path: message.data.snapshot_path || '',
+            video_timestamp: message.data.video_timestamp || 0
+          } as VideoAlert;
+          
+          setVideoAlerts(prev => [videoAlert, ...prev].slice(0, 50));
+          
+          // Generate snapshot from alert
+          const snapshotPath = message.data.snapshot_path || '';
+          const snapshotUrl = snapshotPath ? `http://localhost:8000/${snapshotPath}` : '/placeholder-snapshot.jpg';
+          
+          const snapshot = {
+            id: message.data.id,
+            url: snapshotUrl,
+            timestamp: new Date(message.data.timestamp).getTime() / 1000,
+            description: `${message.data.event_type || 'unknown'} detection - Track ${message.data.track_id || 0}`,
+            boundingBoxes: message.data.bounding_box ? [{
+              x: message.data.bounding_box[0],
+              y: message.data.bounding_box[1],
+              width: message.data.bounding_box[2] - message.data.bounding_box[0],
+              height: message.data.bounding_box[3] - message.data.bounding_box[1],
+              label: message.data.event_type || 'unknown',
+              confidence: message.data.confidence
+            }] : []
+          };
+          
+          setSnapshots(prev => [snapshot, ...prev].slice(0, 20));
+        }
+      });
+      
+      // Listen for connection changes
+      window.addEventListener('sse:connection', (event: any) => {
+        setSseConnected(event.detail.connected);
+      });
+      
+    } catch (error) {
+      console.error('Failed to setup SSE connection:', error);
+      setSseConnected(false);
+    }
+  };
 
   const fetchVideoAlerts = async () => {
     try {
-      setLoading(true);
       const response = await alertService.getAlerts({ 
         pipeline: 'video_surveillance',
         limit: 50 
@@ -79,14 +190,20 @@ const VideoAnalysis = () => {
       setSnapshots(mockSnapshots);
     } catch (error) {
       console.error('Error fetching video alerts:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleVideoSelect = (videoId: string) => {
-    setSelectedVideo(videoId);
+  const handleVideoSelect = (video: any) => {
+    selectVideo(video);
     setCurrentTime(0);
+  };
+
+  const handleStartAnalysis = async () => {
+    await startAnalysis(true, 30); // Enable mock alerts with 30s interval
+  };
+
+  const handleStopAnalysis = async () => {
+    await stopAnalysis();
   };
 
   const handleTimeUpdate = (time: number) => {
@@ -127,17 +244,15 @@ const VideoAnalysis = () => {
     }));
   };
 
-  const selectedVideoSource = videoSources.find(v => v.id === selectedVideo);
-
-  if (loading) {
+  if (loading && videos.length === 0) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Video Analysis</h2>
-          <p className="text-gray-600">Real-time video surveillance and behavior analysis</p>
+          <p className="text-gray-600">Real-time video surveillance and analysis</p>
         </div>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Loading video analysis...</div>
+          <div className="text-gray-500">Loading videos...</div>
         </div>
       </div>
     );
@@ -150,74 +265,166 @@ const VideoAnalysis = () => {
         <p className="text-gray-600">Real-time video surveillance and analysis</p>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-2 text-red-600">
+              <ExclamationTriangleIcon className="h-5 w-5" />
+              <span>{error}</span>
+              <Button variant="outline" size="sm" onClick={loadVideos}>
+                <ArrowPathIcon className="h-4 w-4 mr-1" />
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Video Sources */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <VideoCameraIcon className="h-5 w-5" />
-            <span>Video Sources</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <VideoCameraIcon className="h-5 w-5" />
+              <span>Available Videos</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadVideos} disabled={loading}>
+              <ArrowPathIcon className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {videoSources.map(source => (
+            {videos.map(video => (
               <div
-                key={source.id}
+                key={video.filename}
                 className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                  selectedVideo === source.id 
+                  selectedVideo?.filename === video.filename 
                     ? 'border-blue-500 bg-blue-50' 
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
-                onClick={() => handleVideoSelect(source.id)}
+                onClick={() => handleVideoSelect(video)}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium text-gray-900">{source.name}</h3>
-                  <Badge 
-                    variant={source.status === 'online' ? 'success' : 
-                            source.status === 'offline' ? 'default' : 'danger'}
-                  >
-                    {source.status}
-                  </Badge>
+                  <h3 className="font-medium text-gray-900">{video.display_name}</h3>
+                  <Badge variant="success">Available</Badge>
                 </div>
-                <div className="text-sm text-gray-600">
-                  {source.status === 'online' ? 'Live feed available' : 
-                   source.status === 'offline' ? 'Camera offline' : 'Connection error'}
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>Duration: {Math.round(video.duration)}s</div>
+                  <div>Resolution: {video.resolution[0]}x{video.resolution[1]}</div>
+                  <div>Format: {video.format}</div>
                 </div>
               </div>
             ))}
           </div>
+          {videos.length === 0 && !loading && (
+            <div className="text-center py-8 text-gray-500">
+              No videos available. Please add video files to the backend/media/videos directory.
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {selectedVideoSource && (
+      {selectedVideo && videoStreamUrl && (
         <>
+          {/* Analysis Controls */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Analysis Controls - {selectedVideo.display_name}</span>
+                <div className="flex items-center space-x-2">
+                  {analysisSession && (
+                    <Badge variant={
+                      analysisStatus === 'running' ? 'success' :
+                      analysisStatus === 'starting' ? 'warning' :
+                      analysisStatus === 'error' ? 'danger' : 'default'
+                    }>
+                      {analysisStatus}
+                    </Badge>
+                  )}
+                  {analysisStatus === 'idle' || analysisStatus === 'stopped' ? (
+                    <Button onClick={handleStartAnalysis} disabled={loading}>
+                      <PlayIcon className="h-4 w-4 mr-1" />
+                      Start Analysis
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={handleStopAnalysis} disabled={loading}>
+                      <StopIcon className="h-4 w-4 mr-1" />
+                      Stop Analysis
+                    </Button>
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {analysisSession && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <div className="font-medium text-gray-700">Frames Processed</div>
+                    <div className="text-lg font-semibold">{analysisSession.frames_processed}</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Alerts Generated</div>
+                    <div className="text-lg font-semibold">{analysisSession.alerts_generated}</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Progress</div>
+                    <div className="text-lg font-semibold">{Math.round(analysisSession.progress_percent)}%</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">FPS</div>
+                    <div className="text-lg font-semibold">{Math.round(analysisSession.fps)}</div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Video Player */}
           <Card>
             <CardHeader>
-              <CardTitle>Live Video Feed - {selectedVideoSource.name}</CardTitle>
+              <CardTitle>Video Stream - {selectedVideo.display_name}</CardTitle>
             </CardHeader>
             <CardContent>
               <VideoPlayer
-                src={selectedVideoSource.url}
+                src={videoStreamUrl}
                 boundingBoxes={getBoundingBoxesForTime(currentTime)}
                 onTimeUpdate={handleTimeUpdate}
                 showControls={true}
+                autoPlay={true}
+                loop={true}
+                muted={true}
+                analysisStatus={analysisStatus}
+                onAnalysisStart={handleStartAnalysis}
+                onAnalysisStop={handleStopAnalysis}
                 className="w-full"
               />
             </CardContent>
           </Card>
 
           {/* Timeline */}
-          <VideoTimeline
-            duration={duration || 300} // Mock duration
-            currentTime={currentTime}
-            events={getTimelineEvents()}
-            onSeek={handleSeek}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            isPlaying={isPlaying}
-            showFrameControls={true}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Video Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-gray-600">
+                Timeline showing {getTimelineEvents().length} alert events
+              </div>
+              <div className="mt-2 space-y-1">
+                {getTimelineEvents().slice(0, 5).map((event, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm">{event.label}</span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(event.timestamp * 1000).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -264,6 +471,129 @@ const VideoAnalysis = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Debug Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Debug Information</span>
+            <div className="flex space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={async () => {
+                  try {
+                    const response = await fetch('http://localhost:8000/api/test/alert', { method: 'POST' });
+                    const result = await response.json();
+                    console.log('Test alert result:', result);
+                  } catch (error) {
+                    console.error('Test alert error:', error);
+                  }
+                }}
+              >
+                Test Alert
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={async () => {
+                  try {
+                    const response = await fetch('http://localhost:8000/api/test/sse-status');
+                    const result = await response.json();
+                    console.log('SSE Status:', result);
+                  } catch (error) {
+                    console.error('SSE Status error:', error);
+                  }
+                }}
+              >
+                SSE Status
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <strong>Analysis Status:</strong> {analysisStatus}
+            </div>
+            <div>
+              <strong>Session ID:</strong> {analysisSession?.session_id || 'None'}
+            </div>
+            <div>
+              <strong>SSE Connected:</strong> {sseConnected ? 'Yes' : 'No'}
+            </div>
+            <div>
+              <strong>Alerts Generated:</strong> {analysisSession?.alerts_generated || 0}
+            </div>
+            <div>
+              <strong>Real-time Alerts:</strong> {realtimeAlerts.length}
+            </div>
+            <div>
+              <strong>Video Alerts:</strong> {videoAlerts.length}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Real-time Alerts Display */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <ExclamationTriangleIcon className="h-5 w-5" />
+              <span>Real-time Alerts</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Badge variant={sseConnected ? 'success' : 'danger'}>
+                {sseConnected ? 'Connected' : 'Disconnected'}
+              </Badge>
+              <span className="text-sm text-gray-500">
+                {realtimeAlerts.length} alerts received
+              </span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {realtimeAlerts.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              {analysisStatus === 'running' 
+                ? 'Waiting for alerts... (Mock alerts generate every 30 seconds)'
+                : 'Start video analysis to receive real-time alerts'
+              }
+              <div className="mt-2 text-xs">
+                Check browser console for SSE messages
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {realtimeAlerts.map((alert, index) => (
+                <div key={`${alert.id}-${index}`} className="p-3 border rounded-lg bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge variant={
+                      alert.confidence > 0.8 ? 'danger' :
+                      alert.confidence > 0.6 ? 'warning' : 'default'
+                    }>
+                      {(alert as any).event_type || alert.source_pipeline}
+                    </Badge>
+                    <span className="text-sm text-gray-500">
+                      {new Date(alert.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <div>Confidence: {Math.round(alert.confidence * 100)}%</div>
+                    <div>Pipeline: {alert.source_pipeline}</div>
+                    {(alert as any).metadata?.description && (
+                      <div className="text-gray-600 mt-1">
+                        {(alert as any).metadata.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Snapshot Gallery */}
       <Card>

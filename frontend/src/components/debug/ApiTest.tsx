@@ -15,7 +15,7 @@ const ApiTest: React.FC = () => {
       const healthResponse = await api.get('/health');
       results.health = { success: true, data: healthResponse.data };
     } catch (error) {
-      results.health = { success: false, error: error.message };
+      results.health = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     try {
@@ -23,7 +23,7 @@ const ApiTest: React.FC = () => {
       const metricsResponse = await api.get('/system/metrics');
       results.metrics = { success: true, data: metricsResponse.data };
     } catch (error) {
-      results.metrics = { success: false, error: error.message };
+      results.metrics = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     try {
@@ -31,7 +31,7 @@ const ApiTest: React.FC = () => {
       const alertsResponse = await api.get('/alerts?limit=5');
       results.alerts = { success: true, data: alertsResponse.data };
     } catch (error) {
-      results.alerts = { success: false, error: error.message };
+      results.alerts = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     try {
@@ -39,7 +39,7 @@ const ApiTest: React.FC = () => {
       const systemData = await dataService.getSystemMetrics();
       results.dataService = { success: true, data: systemData };
     } catch (error) {
-      results.dataService = { success: false, error: error.message };
+      results.dataService = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     setTestResults(results);

@@ -37,8 +37,10 @@ class SSEService {
   private url: string;
   private connected = false;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
-    this.url = `${baseUrl}/events`;
+  constructor(baseUrl?: string) {
+    // Use the same API URL as the main API service
+    const apiUrl = baseUrl || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    this.url = `${apiUrl}/events`;
   }
 
   connect(): Promise<void> {

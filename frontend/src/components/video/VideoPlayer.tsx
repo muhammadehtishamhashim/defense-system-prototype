@@ -30,7 +30,11 @@ interface VideoPlayerProps {
   showControls?: boolean;
   autoPlay?: boolean;
   loop?: boolean;
+  muted?: boolean;
   className?: string;
+  analysisStatus?: 'idle' | 'starting' | 'running' | 'paused' | 'stopped' | 'error';
+  onAnalysisStart?: () => void;
+  onAnalysisStop?: () => void;
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -39,9 +43,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onTimeUpdate,
   onFrameChange,
   showControls = true,
-  autoPlay = false,
-  loop = false,
-  className = ''
+  autoPlay = true,  // Default to true for streaming
+  loop = true,      // Default to true for streaming
+  muted = true,     // Default to true for streaming
+  className = '',
+  analysisStatus = 'idle',
+  onAnalysisStart,
+  onAnalysisStop
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,7 +59,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(muted);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -258,6 +266,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           src={src}
           autoPlay={autoPlay}
           loop={loop}
+          muted={muted}
           className="w-full h-auto"
           style={{
             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
@@ -265,6 +274,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           }}
           onMouseDown={handleMouseDown}
         />
+        
+        {/* Analysis Status Indicator */}
+        {analysisStatus !== 'idle' && (
+          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              analysisStatus === 'running' ? 'bg-green-500 animate-pulse' :
+              analysisStatus === 'starting' ? 'bg-yellow-500 animate-pulse' :
+              analysisStatus === 'error' ? 'bg-red-500' :
+              'bg-gray-500'
+            }`} />
+            <span className="text-sm capitalize">{analysisStatus}</span>
+          </div>
+        )}
         
         <canvas
           ref={canvasRef}
@@ -354,6 +376,47 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
+              {/* Analysis Controls */}
+              {(onAnalysisStart || onAnalysisStop) && (
+                <>
+                  {analysisStatus === 'idle' || analysisStatus === 'stopped' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onAnalysisStart}
+                      className="text-white hover:bg-white/20"
+                      disabled={analysisStatus === 'starting'}
+                    >
+                      <PlayIcon className="h-4 w-4 mr-1" />
+                      <span className="text-sm">Analyze</span>
+                    </Button>
+                  ) : analysisStatus === 'running' || analysisStatus === 'starting' || analysisStatus === 'paused' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onAnalysisStop}
+                      className="text-white hover:bg-white/20"
+                      disabled={analysisStatus === 'starting'}
+                    >
+                      <PauseIcon className="h-4 w-4 mr-1" />
+                      <span className="text-sm">Stop</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onAnalysisStart}
+                      className="text-white hover:bg-white/20"
+                      disabled={true}
+                    >
+                      <PlayIcon className="h-4 w-4 mr-1" />
+                      <span className="text-sm">Error</span>
+                    </Button>
+                  )}
+                  <div className="w-px h-6 bg-white/30 mx-2" />
+                </>
+              )}
+              
               <Button
                 variant="ghost"
                 size="sm"

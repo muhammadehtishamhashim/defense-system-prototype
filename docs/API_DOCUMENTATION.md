@@ -565,3 +565,247 @@ These interfaces allow you to:
 - Test API calls directly from the browser
 - View request/response schemas
 - Download API specifications
+##
+ Video Streaming API
+
+### Video Management
+
+#### GET /api/videos
+List all available video files in the media directory.
+
+**Response:**
+```json
+[
+  {
+    "filename": "demo-video.mp4",
+    "display_name": "Demo Video",
+    "duration": 120.5,
+    "resolution": [1920, 1080],
+    "format": ".mp4",
+    "file_size": 1024000,
+    "created_at": "2024-01-15T10:00:00.000Z",
+    "fps": 30.0
+  }
+]
+```
+
+#### GET /api/videos/{filename}
+Stream a video file with HTTP range request support for efficient streaming.
+
+**Parameters:**
+- `filename` (path): Name of the video file
+
+**Headers:**
+- `Range` (optional): Byte range for partial content requests
+
+**Response:**
+- `200` - Full video content
+- `206` - Partial content (when Range header is provided)
+- `404` - Video file not found
+- `416` - Range not satisfiable
+
+#### GET /api/videos/{filename}/info
+Get metadata information for a specific video file.
+
+**Parameters:**
+- `filename` (path): Name of the video file
+
+**Response:**
+```json
+{
+  "filename": "demo-video.mp4",
+  "display_name": "Demo Video",
+  "duration": 120.5,
+  "resolution": [1920, 1080],
+  "format": ".mp4",
+  "file_size": 1024000,
+  "created_at": "2024-01-15T10:00:00.000Z",
+  "fps": 30.0
+}
+```
+
+### Video Analysis
+
+#### POST /api/analysis/start
+Start a video analysis session with optional mock alert generation.
+
+**Request Body:**
+```json
+{
+  "video_filename": "demo-video.mp4",
+  "mock_alerts": true,
+  "alert_interval": 30
+}
+```
+
+**Response:**
+```json
+{
+  "session_id": "uuid-session-id",
+  "message": "Video analysis started for demo-video.mp4",
+  "success": true
+}
+```
+
+#### POST /api/analysis/stop
+Stop an active video analysis session.
+
+**Query Parameters:**
+- `session_id` (required): ID of the analysis session to stop
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Video analysis session stopped",
+  "analysis_stopped": true,
+  "alerts_stopped": true
+}
+```
+
+#### GET /api/analysis/status/{session_id}
+Get the current status and metrics of an analysis session.
+
+**Parameters:**
+- `session_id` (path): ID of the analysis session
+
+**Response:**
+```json
+{
+  "session_id": "uuid-session-id",
+  "video_filename": "demo-video.mp4",
+  "status": "running",
+  "started_at": "2024-01-15T10:00:00.000Z",
+  "frames_processed": 150,
+  "alerts_generated": 5,
+  "current_frame": 150,
+  "total_frames": 3600,
+  "fps": 30.0,
+  "progress_percent": 4.17
+}
+```
+
+#### GET /api/analysis/sessions
+List all active video analysis sessions.
+
+**Response:**
+```json
+[
+  {
+    "session_id": "uuid-session-id",
+    "video_filename": "demo-video.mp4",
+    "status": "running",
+    "started_at": "2024-01-15T10:00:00.000Z",
+    "frames_processed": 150,
+    "alerts_generated": 5,
+    "current_frame": 150,
+    "total_frames": 3600,
+    "fps": 30.0,
+    "progress_percent": 4.17
+  }
+]
+```
+
+### Performance Monitoring
+
+#### GET /api/monitoring/metrics
+Get global performance metrics for all video processing sessions.
+
+**Response:**
+```json
+{
+  "global_metrics": {
+    "frames_per_second": 45.2,
+    "processing_latency": 0.15,
+    "error_count": 2,
+    "status": "healthy",
+    "timestamp": "2024-01-15T10:30:00.000Z"
+  },
+  "session_metrics": {
+    "session-id-1": {
+      "session_id": "session-id-1",
+      "frames_per_second": 30.0,
+      "processing_latency": 0.12,
+      "error_count": 0,
+      "status": "healthy",
+      "uptime_seconds": 1800.5,
+      "timestamp": "2024-01-15T10:30:00.000Z"
+    }
+  },
+  "active_sessions": 1
+}
+```
+
+#### GET /api/monitoring/metrics/{session_id}
+Get detailed performance metrics for a specific analysis session.
+
+**Parameters:**
+- `session_id` (path): ID of the analysis session
+
+**Response:**
+```json
+{
+  "session_id": "session-id-1",
+  "frames_per_second": 30.0,
+  "processing_latency": 0.12,
+  "memory_usage_mb": 256.5,
+  "cpu_usage_percent": 45.2,
+  "error_count": 0,
+  "last_error": null,
+  "uptime_seconds": 1800.5,
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+## Real-time Features
+
+### Mock Alert Generation
+When video analysis is started with `mock_alerts: true`, the system generates realistic video surveillance alerts at the specified interval (default: 30 seconds). These alerts are automatically sent to connected clients via Server-Sent Events.
+
+### Server-Sent Events
+The `/events` endpoint provides real-time updates for:
+- New video surveillance alerts
+- Analysis session status changes
+- System health updates
+- Connection heartbeats
+
+**Example Alert Event:**
+```json
+{
+  "type": "alert",
+  "data": {
+    "id": "alert-uuid",
+    "timestamp": "2024-01-15T10:30:00.000Z",
+    "confidence": 0.85,
+    "source_pipeline": "video_surveillance",
+    "event_type": "loitering",
+    "bounding_box": [100, 150, 300, 400],
+    "track_id": 15,
+    "metadata": {
+      "session_id": "session-uuid",
+      "location": "Main Entrance",
+      "description": "Person detected loitering near entrance",
+      "mock_alert": true
+    }
+  },
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+## Error Codes
+
+### Video Streaming Errors
+- `404` - Video file not found
+- `415` - Unsupported video format
+- `416` - HTTP range not satisfiable
+- `500` - Video streaming error
+
+### Analysis Errors
+- `404` - Analysis session not found
+- `400` - Invalid analysis parameters
+- `500` - Analysis processing error
+
+### Monitoring Errors
+- `404` - Session metrics not found
+- `500` - Monitoring system error

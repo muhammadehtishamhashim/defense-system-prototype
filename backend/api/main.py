@@ -7,7 +7,7 @@ import uuid
 import json
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -35,11 +35,23 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Add middleware to handle OPTIONS requests
+@app.middleware("http")
+async def handle_options(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = JSONResponse(content={})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+    response = await call_next(request)
+    return response
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -49,12 +61,27 @@ logger = get_logger(__name__)
 async def startup_event():
     """Initialize application on startup"""
     logger.info("Starting HifazatAI Alert Broker API")
+    
+    # Start SSE broadcast service
+    await sse_manager.start_broadcast_service()
+    
+    # Start monitoring service
+    await video_monitor.start_monitoring()
+    
+    # Set up mock alert generator callback
+    mock_alert_generator.set_alert_callback(sse_manager.broadcast_alert)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on application shutdown"""
     logger.info("Shutting down HifazatAI Alert Broker API")
+    
+    # Stop SSE broadcast service
+    await sse_manager.stop_broadcast_service()
+    
+    # Stop monitoring service
+    await video_monitor.stop_monitoring()
 
 
 @app.get("/", response_model=dict)
@@ -434,67 +461,13 @@ async def get_pipeline_metrics(
 
 
 # Server-Sent Events endpoint
+from services.sse_manager import sse_manager
+from services.mock_alert_generator import mock_alert_generator
+
 @app.get("/events")
 async def stream_events():
     """Server-Sent Events endpoint for real-time updates"""
-    
-    async def event_generator() -> AsyncGenerator[str, None]:
-        """Generate SSE events"""
-        try:
-            # Send initial connection confirmation
-            initial_data = {
-                "type": "connection",
-                "data": {"status": "connected", "timestamp": datetime.now().isoformat()},
-                "timestamp": datetime.now().isoformat()
-            }
-            yield f"data: {json.dumps(initial_data)}\n\n"
-            
-            # Send heartbeat every 60 seconds (reduced frequency)
-            while True:
-                try:
-                    heartbeat_data = {
-                        "type": "heartbeat",
-                        "data": {"timestamp": datetime.now().isoformat()},
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    yield f"data: {json.dumps(heartbeat_data)}\n\n"
-                    
-                    # Wait before next heartbeat
-                    await asyncio.sleep(60)
-                    
-                except asyncio.CancelledError:
-                    logger.info("SSE connection cancelled by client")
-                    break
-                except Exception as e:
-                    logger.error(f"SSE error in heartbeat: {str(e)}")
-                    # Send error message before closing
-                    error_data = {
-                        "type": "error",
-                        "data": {"message": "Connection error", "timestamp": datetime.now().isoformat()},
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    try:
-                        yield f"data: {json.dumps(error_data)}\n\n"
-                    except:
-                        pass
-                    break
-                    
-        except Exception as e:
-            logger.error(f"SSE generator error: {str(e)}")
-            return
-    
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Cache-Control",
-            "X-Accel-Buffering": "no"  # Disable nginx buffering
-        }
-    )
+    return await sse_manager.create_sse_response()
 
 
 # System metrics endpoint
@@ -548,6 +521,318 @@ async def get_system_metrics(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve system metrics: {str(e)}"
         )
+
+
+# Video Streaming Endpoints
+
+from services.video_streaming import video_streaming_service, VideoInfo
+from services.video_analysis import video_analysis_coordinator, AnalysisSession, AnalysisStatus
+from services.mock_alert_generator import mock_alert_generator
+from services.monitoring import video_monitor, PerformanceMetrics
+from pydantic import BaseModel
+
+class StartAnalysisRequest(BaseModel):
+    """Request model for starting video analysis"""
+    video_filename: str
+    mock_alerts: bool = True
+    alert_interval: int = 30
+
+class StartAnalysisResponse(BaseModel):
+    """Response model for starting video analysis"""
+    session_id: str
+    message: str
+    success: bool
+
+@app.get("/api/videos", response_model=List[VideoInfo])
+async def list_videos():
+    """Get list of available video files"""
+    try:
+        videos = video_streaming_service.list_available_videos()
+        logger.info(f"Listed {len(videos)} available videos")
+        return videos
+    except Exception as e:
+        logger.error(f"Error listing videos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list videos: {str(e)}"
+        )
+
+
+@app.get("/api/videos/{filename}")
+async def stream_video(filename: str, request: Request):
+    """Stream video file with range request support"""
+    try:
+        return await video_streaming_service.stream_video(filename, request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error streaming video {filename}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stream video: {str(e)}"
+        )
+
+
+@app.get("/api/videos/{filename}/info", response_model=VideoInfo)
+async def get_video_info(filename: str):
+    """Get metadata for a specific video file"""
+    try:
+        video_info = video_streaming_service.get_video_info(filename)
+        logger.info(f"Retrieved info for video: {filename}")
+        return video_info
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting video info for {filename}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get video info: {str(e)}"
+        )
+
+
+# Video Analysis Endpoints
+
+@app.post("/api/analysis/start", response_model=StartAnalysisResponse)
+async def start_video_analysis(request: StartAnalysisRequest):
+    """Start video analysis session"""
+    try:
+        # Start video analysis
+        session_id = await video_analysis_coordinator.start_analysis(request.video_filename)
+        
+        # Start mock alert generation if requested
+        if request.mock_alerts:
+            await mock_alert_generator.start_mock_alerts(session_id, request.alert_interval)
+        
+        logger.info(f"Started video analysis session {session_id} for {request.video_filename}")
+        
+        return StartAnalysisResponse(
+            session_id=session_id,
+            message=f"Video analysis started for {request.video_filename}",
+            success=True
+        )
+        
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error starting video analysis: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start video analysis: {str(e)}"
+        )
+
+
+@app.post("/api/analysis/stop")
+async def stop_video_analysis(session_id: str):
+    """Stop video analysis session"""
+    try:
+        # Stop video analysis
+        analysis_stopped = await video_analysis_coordinator.stop_analysis(session_id)
+        
+        # Stop mock alert generation
+        alerts_stopped = await mock_alert_generator.stop_mock_alerts(session_id)
+        
+        if not analysis_stopped:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Analysis session {session_id} not found"
+            )
+        
+        logger.info(f"Stopped video analysis session {session_id}")
+        
+        return {
+            "success": True,
+            "message": f"Video analysis session {session_id} stopped",
+            "analysis_stopped": analysis_stopped,
+            "alerts_stopped": alerts_stopped
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error stopping video analysis: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stop video analysis: {str(e)}"
+        )
+
+
+@app.get("/api/analysis/status/{session_id}", response_model=AnalysisSession)
+async def get_analysis_status(session_id: str):
+    """Get status of video analysis session"""
+    try:
+        session_status = video_analysis_coordinator.get_analysis_status(session_id)
+        
+        if not session_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Analysis session {session_id} not found"
+            )
+        
+        return session_status
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting analysis status for {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get analysis status: {str(e)}"
+        )
+
+
+@app.get("/api/analysis/sessions", response_model=List[AnalysisSession])
+async def list_analysis_sessions():
+    """Get list of all active analysis sessions"""
+    try:
+        sessions = video_analysis_coordinator.list_active_sessions()
+        return sessions
+    except Exception as e:
+        logger.error(f"Error listing analysis sessions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list analysis sessions: {str(e)}"
+        )
+
+
+# Monitoring Endpoints
+
+@app.get("/api/monitoring/metrics/{session_id}")
+async def get_session_metrics(session_id: str):
+    """Get performance metrics for a specific analysis session"""
+    try:
+        metrics = video_monitor.get_session_metrics(session_id)
+        if not metrics:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No metrics found for session {session_id}"
+            )
+        
+        return {
+            "session_id": metrics.session_id,
+            "frames_per_second": metrics.frames_per_second,
+            "processing_latency": metrics.processing_latency,
+            "memory_usage_mb": metrics.memory_usage_mb,
+            "cpu_usage_percent": metrics.cpu_usage_percent,
+            "error_count": metrics.error_count,
+            "last_error": metrics.last_error,
+            "uptime_seconds": metrics.uptime_seconds,
+            "status": metrics.status.value,
+            "timestamp": metrics.timestamp.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get session metrics: {str(e)}"
+        )
+
+
+@app.get("/api/monitoring/metrics")
+async def get_all_metrics():
+    """Get performance metrics for all analysis sessions"""
+    try:
+        all_metrics = video_monitor.get_all_metrics()
+        global_metrics = video_monitor.get_global_metrics()
+        
+        session_metrics = {}
+        for session_id, metrics in all_metrics.items():
+            session_metrics[session_id] = {
+                "session_id": metrics.session_id,
+                "frames_per_second": metrics.frames_per_second,
+                "processing_latency": metrics.processing_latency,
+                "error_count": metrics.error_count,
+                "status": metrics.status.value,
+                "uptime_seconds": metrics.uptime_seconds,
+                "timestamp": metrics.timestamp.isoformat()
+            }
+        
+        return {
+            "global_metrics": {
+                "frames_per_second": global_metrics.frames_per_second,
+                "processing_latency": global_metrics.processing_latency,
+                "error_count": global_metrics.error_count,
+                "status": global_metrics.status.value,
+                "timestamp": global_metrics.timestamp.isoformat()
+            },
+            "session_metrics": session_metrics,
+            "active_sessions": len(session_metrics)
+        }
+    except Exception as e:
+        logger.error(f"Error getting all metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get metrics: {str(e)}"
+        )
+
+
+# Test Endpoints for Debugging
+
+@app.post("/api/test/alert")
+async def test_alert():
+    """Generate a test alert to verify SSE functionality"""
+    try:
+        # Create a test alert
+        test_alert = VideoAlert(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.now(),
+            confidence=0.95,
+            source_pipeline="video_surveillance",
+            status=AlertStatus.ACTIVE,
+            event_type="test_alert",
+            bounding_box=[100, 100, 200, 200],
+            track_id=999,
+            snapshot_path="test_snapshot.jpg",
+            video_timestamp=datetime.now().isoformat(),
+            metadata={
+                'test': True,
+                'description': 'This is a test alert to verify SSE functionality'
+            }
+        )
+        
+        # Send through SSE
+        await sse_manager.broadcast_alert(test_alert)
+        
+        logger.info(f"Generated test alert: {test_alert.id}")
+        
+        return {
+            "success": True,
+            "message": "Test alert generated and sent via SSE",
+            "alert_id": test_alert.id,
+            "connections": len(sse_manager.connections)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating test alert: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate test alert: {str(e)}"
+        )
+
+
+@app.get("/api/test/sse-status")
+async def get_sse_status():
+    """Get SSE connection status"""
+    return {
+        "connections": len(sse_manager.connections),
+        "queue_size": sse_manager.alert_queue.qsize(),
+        "broadcast_task_running": sse_manager.broadcast_task is not None and not sse_manager.broadcast_task.done()
+    }
+
+
+# Snapshot serving endpoint
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Create snapshots directory if it doesn't exist
+os.makedirs("media/snapshots", exist_ok=True)
+
+# Mount static files for snapshots
+app.mount("/snapshots", StaticFiles(directory="media/snapshots"), name="snapshots")
 
 
 if __name__ == "__main__":

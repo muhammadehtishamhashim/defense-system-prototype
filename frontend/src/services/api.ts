@@ -1,13 +1,36 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
-// API Configuration
-const API_CONFIG = {
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
-  timeout: 30000, // Increased timeout for AI processing
-  retryAttempts: 3,
-  retryDelay: 1000,
+// API Configuration with environment-specific defaults
+const getAPIConfig = () => {
+  const isDev = import.meta.env.DEV;
+  const apiUrl = import.meta.env.VITE_API_URL;
+  
+  // Validate API URL
+  if (!apiUrl) {
+    console.warn('⚠️ VITE_API_URL not set, using default localhost');
+  }
+  
+  const baseURL = apiUrl || 'http://localhost:8000';
+  
+  // Log configuration in development
+  if (isDev) {
+    console.log('🔧 API Configuration:', {
+      baseURL,
+      environment: import.meta.env.MODE,
+      nodeEnv: import.meta.env.VITE_NODE_ENV
+    });
+  }
+  
+  return {
+    baseURL,
+    timeout: 30000, // Increased timeout for AI processing
+    retryAttempts: 3,
+    retryDelay: 1000,
+  };
 };
+
+const API_CONFIG = getAPIConfig();
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -132,7 +155,7 @@ export const checkAPIHealth = async (): Promise<boolean> => {
 
 // Connection status monitoring
 let connectionStatus = true;
-let statusCheckInterval: number | null = null;
+let statusCheckInterval: NodeJS.Timeout | null = null;
 
 export const startConnectionMonitoring = (intervalMs: number = 30000) => {
   if (statusCheckInterval) {

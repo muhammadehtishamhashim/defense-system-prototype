@@ -3,7 +3,7 @@ import type { BaseAlert } from '../types';
 import AlertList from '../components/alerts/AlertList';
 import RealTimeAlertFeed from '../components/alerts/RealTimeAlertFeed';
 import AlertDetail from '../components/alerts/AlertDetail';
-import AlertSummary from '../components/alerts/AlertSummary';
+// import AlertSummary from '../components/alerts/AlertSummary';
 import Modal from '../components/ui/Modal';
 
 const Alerts = () => {
@@ -43,7 +43,7 @@ const Alerts = () => {
             onAlertSelect={handleAlertSelect}
             maxAlerts={20}
             refreshInterval={60000}
-            useSSE={false}
+            useSSE={true}
           />
         </div>
 

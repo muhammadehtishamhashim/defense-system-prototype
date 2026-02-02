@@ -30,50 +30,42 @@ class DetectionEngine:
         """
         Async generator that yields (processed_frame_bytes, detection_count, detected_classes)
         """
-        # We use a loop to restart the video when it ends to simulate 24/7 stream
         while True:
             cap = cv2.VideoCapture(self.source_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
             if not fps or fps <= 0:
                 fps = 30 # Default fallback
             
+            # User wants "1 frame of 1 sec prediction" -> Run inference once per second
+            # So stride should be equal to FPS
+            self.frame_stride = int(fps)
+            
+            frame_time = 1.0 / fps
             frame_count = 0
             
             while cap.isOpened():
+                start_time = time.time()
+                
                 ret, frame = cap.read()
                 if not ret:
                     break
                 
-                start_time = time.time()
-                
-                # Logic: Only process inference every `frame_stride` frames
-                # But we want to stream VIDEO smoothly-ish.
-                # If we only process 1 FPS, we should still yield the other frames, just without NEW detections?
-                # Or just yield the processed frames at 1 FPS (User said "Process only 1 frame per second... but keep video stream smooth if possible")
-                
-                # Strategy: 
-                # Run inference only if frame_count % frame_stride == 0.
-                # Otherwise, display the *last known* detections on the current frame.
-                
                 detections = None
                 
-                # NOTE: For improved performance in async/FastAPI, 
-                # we should run the blocking inference in a thread.
+                # Logic: Run inference once per second (approx)
                 if frame_count % self.frame_stride == 0:
-                    # Run Inference
                     try:
-                        # Wrapping blocking call to avoid blocking the event loop
+                        # Wrapping blocking call
                         result = await asyncio.to_thread(
                             self.client.infer, 
                             frame, 
                             self.model_id
                         )
                         detections = sv.Detections.from_inference(result)
-                        self.last_detections = detections # Cache detections
+                        self.last_detections = detections
                     except Exception as e:
                         print(f"Inference error: {e}")
                 else:
-                    # Use cached detections
                     detections = getattr(self, 'last_detections', None)
 
                 # Annotate Frame
@@ -87,21 +79,17 @@ class DetectionEngine:
                 ret, buffer = cv2.imencode('.jpg', annotated_frame)
                 frame_bytes = buffer.tobytes()
                 
-                # Count current detections
+                # Count detections
                 count = len(detections) if detections else 0
                 
                 yield frame_bytes, count
                 
                 frame_count += 1
                 
-                # Control framerate (Sleep to match video FPS)
-                # processing_time = time.time() - start_time
-                # delay = max(0, (1.0 / fps) - processing_time)
-                # await asyncio.sleep(delay) 
-                
-                # Since we are in an async loop and this is CPU bound, strict sleep might not be precise, 
-                # but good enough for a demo.
-                await asyncio.sleep(0.01)
+                # Enforce Real-Time Playback (Prevent Fast Forward)
+                processing_time = time.time() - start_time
+                delay = max(0.001, frame_time - processing_time)
+                await asyncio.sleep(delay)
 
             cap.release()
             print(f"Video {self.source_path} ended, restarting...")

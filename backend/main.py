@@ -65,7 +65,7 @@ from fastapi.staticfiles import StaticFiles
 # ... existing imports ...
 
 # Mount snapshots
-app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
+
 
 # ... existing code ...
 
@@ -97,8 +97,8 @@ async def detection_loop(source: str, model_id: str):
         # Broadcast and Snapshot
         if count > 0:
             now = asyncio.get_event_loop().time()
-            # Throttle snapshot saving: once every 5 seconds per source
-            if now - last_snapshot_time.get(source, 0) > 5:
+            # Throttle snapshot saving: once every 1.0 seconds per source
+            if now - last_snapshot_time.get(source, 0) > 1.0:
                 timestamp = int(now)
                 filename = f"{source}_{timestamp}.jpg"
                 filepath = os.path.join("snapshots", filename)
@@ -134,6 +134,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Mount snapshots
+app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
+
 # CORS Config
 app.add_middleware(
     CORSMiddleware,
@@ -168,6 +171,8 @@ def generate_mjpeg(source: str):
         if frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            import time
+            time.sleep(0.04) # Limit to approx 25 FPS
         else:
             # Return a blank frame or wait if no frame available yet
             import time

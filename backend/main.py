@@ -2,10 +2,12 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import Dict, List
+from pydantic import BaseModel
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,8 +15,8 @@ load_dotenv()
 
 # Dictionary to hold the latest frame for each source
 latest_frames: Dict[str, bytes] = {}
-# Dictionary to hold the latest stats
-latest_stats: Dict[str, int] = {
+# Verified stats (only incremented by user action)
+verified_stats: Dict[str, int] = {
     "threats": 0,
     "thefts": 0,
     "border_anomalies": 0
@@ -50,27 +52,8 @@ VIDEO_PATHS = {
     "border": f"{VIDEO_DIR}/theft.mp4" # Placeholder
 }
 
-# Background Detection Tasks
-async def detection_loop(source: str, model_id: str):
-    print(f"Starting detection loop for {source} with model {model_id}")
-    video_path = VIDEO_PATHS.get(source)
-    if not video_path or not os.path.exists(video_path):
-        print(f"Error: Video not found for {source} at {video_path}")
-        return
-
-    engine = DetectionEngine(source_path=video_path, model_id=model_id)
-    
-from fastapi.staticfiles import StaticFiles
-
-# ... existing imports ...
-
-# Mount snapshots
-
-
-# ... existing code ...
-
-# Throttling snapshots
-last_snapshot_time = {}
+# Throttling snapshots (Debounce logic)
+last_alert_time = {}
 
 # Background Detection Tasks
 async def detection_loop(source: str, model_id: str):
@@ -83,36 +66,33 @@ async def detection_loop(source: str, model_id: str):
     engine = DetectionEngine(source_path=video_path, model_id=model_id)
     
     async for frame_bytes, count in engine.run():
-        # Update global state
+        # Update global state (video feed)
         latest_frames[source] = frame_bytes
+
+        # Strict Verification Workflow:
+        # 1. Detection > 0.75 confidence (handled in engine)
+        # 2. Debounce: Only 1 alert every 5 seconds per source
         
-        # Update stats...
-        if source == "threat":
-            latest_stats["threats"] = count
-        elif source == "theft":
-            latest_stats["thefts"] = count
-        elif source == "border":
-            latest_stats["border_anomalies"] = count
-            
-        # Broadcast and Snapshot
         if count > 0:
             now = asyncio.get_event_loop().time()
-            # Throttle snapshot saving: once every 1.0 seconds per source
-            if now - last_snapshot_time.get(source, 0) > 1.0:
+            # 5-second cooldown
+            if now - last_alert_time.get(source, 0) > 5.0:
                 timestamp = int(now)
                 filename = f"{source}_{timestamp}.jpg"
                 filepath = os.path.join("snapshots", filename)
-                # Run in thread to not block
-                await asyncio.to_thread(write_snapshot, filepath, frame_bytes)
-                last_snapshot_time[source] = now
                 
-                # Send alert with snapshot URL
+                # Save snapshot
+                await asyncio.to_thread(write_snapshot, filepath, frame_bytes)
+                last_alert_time[source] = now
+                
+                # Send "PENDING" alert. Stats DO NOT update yet.
                 await manager.broadcast({
                     "type": "alert",
                     "source": source,
                     "count": count,
                     "timestamp": timestamp,
-                    "snapshot": f"/snapshots/{filename}"
+                    "snapshot": f"/snapshots/{filename}",
+                    "status": "pending"
                 })
 
 def write_snapshot(path, data):
@@ -136,6 +116,67 @@ app = FastAPI(lifespan=lifespan)
 
 # Mount snapshots
 app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
+
+from pydantic import BaseModel
+
+@app.get("/snapshots-list")
+async def get_pending_snapshots():
+    # List all jpg files in snapshots/ that are NOT in verified/ (subdirectories are excluded by os.listdir usually, but let's be safe)
+    files = []
+    if os.path.exists("snapshots"):
+        for f in os.listdir("snapshots"):
+            if f.endswith(".jpg"):
+                # Parse timestamp from filename: source_timestamp.jpg (e.g. theft_172345.jpg)
+                try:
+                    parts = f.rsplit("_", 1)
+                    source = parts[0]
+                    timestamp = int(parts[1].split(".")[0])
+                    files.append({
+                        "source": source,
+                        "timestamp": timestamp,
+                        "snapshot": f"/snapshots/{f}",
+                        "filename": f 
+                    })
+                except Exception:
+                    continue
+    # Sort by timestamp desc
+    files.sort(key=lambda x: x["timestamp"], reverse=True)
+    return files
+
+class VerifyRequest(BaseModel):
+    source: str
+    count: int = 1
+    filename: str
+
+@app.post("/verify")
+async def verify_alert(req: VerifyRequest):
+    # 1. Move file to verified/
+    source_path = os.path.join("snapshots", req.filename)
+    dest_path = os.path.join("snapshots", "verified", req.filename)
+    
+    if os.path.exists(source_path):
+        os.rename(source_path, dest_path)
+    
+    # 2. Increment global stats
+    if req.source == "threat":
+        verified_stats["threats"] += req.count
+    elif req.source == "theft":
+        verified_stats["thefts"] += req.count
+    elif req.source == "border":
+        verified_stats["border_anomalies"] += req.count
+    
+    return {"status": "verified", "stats": verified_stats}
+
+class DismissRequest(BaseModel):
+    filename: str
+
+@app.post("/dismiss")
+async def dismiss_alert(req: DismissRequest):
+    # Delete the file
+    path = os.path.join("snapshots", req.filename)
+    if os.path.exists(path):
+        os.remove(path)
+    return {"status": "dismissed"}
 
 # CORS Config
 app.add_middleware(
@@ -162,7 +203,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/stats")
 async def get_stats():
-    return latest_stats
+    # Return VERIFIED stats only
+    return verified_stats
 
 # Endpoint to stream video
 def generate_mjpeg(source: str):

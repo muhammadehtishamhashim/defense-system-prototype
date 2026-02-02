@@ -61,8 +61,9 @@ class DetectionEngine:
                             frame, 
                             self.model_id
                         )
-                        detections = sv.Detections.from_inference(result)
-                        self.last_detections = detections
+                        raw_detections = sv.Detections.from_inference(result)
+                        # Filter by confidence > 0.75
+                        self.last_detections = raw_detections[raw_detections.confidence > 0.75]
                     except Exception as e:
                         print(f"Inference error: {e}")
                 else:

@@ -45,6 +45,7 @@ export const AlertProvider = ({ children }: { children: ReactNode }) => {
               count: data.count,
               timestamp: data.timestamp,
               type: data.type,
+              snapshot: data.snapshot,
             };
             setAlerts((prev) => [newAlert, ...prev].slice(0, 50)); // Keep last 50
             setLatestAlert(newAlert);

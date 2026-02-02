@@ -3,21 +3,55 @@
 import { useAlerts } from "@/context/AlertContext";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function VerifyPage() {
-  const { alerts } = useAlerts();
-  // Filter alerts that have snapshots (or simulate snapshots for demo if needed)
-  // For now, we only show alerts that actually have a snapshot URL provided by backend
-  const snapshotAlerts = alerts.filter(a => a.snapshot) || [];
+  // Fetch from API instead of context
+  const [snapshotAlerts, setSnapshotAlerts] = useState<any[]>([]);
   
-  // Local state for handled alerts to hide them without clearing global state if desired
+  const fetchSnapshots = async () => {
+    try {
+        const res = await fetch("http://localhost:8000/snapshots-list");
+        if (res.ok) {
+            const data = await res.json();
+            setSnapshotAlerts(data);
+        }
+    } catch (e) {
+        console.error("Failed to fetch snapshots");
+    }
+  };
+
+  useEffect(() => {
+    fetchSnapshots();
+    // Poll every 5 seconds to keep specific page sync
+    const interval = setInterval(fetchSnapshots, 5000);
+    return () => clearInterval(interval);
+  }, []);
   const [handled, setHandled] = useState<Set<number>>(new Set());
 
-  const handleAction = (timestamp: number, action: 'verify' | 'dismiss') => {
+  const handleAction = async (timestamp: number, source: string, action: 'verify' | 'dismiss', alertFilename: string) => {
       console.log(`Action: ${action} on alert ${timestamp}`);
-      setHandled(prev => new Set(prev).add(timestamp));
-      // In a real app, send API request to backend to log verify/dismiss
+      
+      try {
+          if (action === 'verify') {
+              await fetch(`http://localhost:8000/verify`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ source, count: 1, filename: alertFilename })
+              });
+          } else {
+              await fetch(`http://localhost:8000/dismiss`, { 
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filename: alertFilename })
+              });
+          }
+           // Refresh list
+           fetchSnapshots();
+          setHandled(prev => new Set(prev).add(timestamp));
+      } catch (e) {
+          console.error(`Failed to ${action} alert`, e);
+      }
   };
 
   return (
@@ -66,13 +100,13 @@ export default function VerifyPage() {
 
                         <div className="flex gap-3">
                             <button 
-                                onClick={() => handleAction(alert.timestamp, 'verify')}
+                                onClick={() => handleAction(alert.timestamp, alert.source, 'verify', alert.filename)}
                                 className="flex-1 rounded bg-green-500 py-2 text-sm font-medium text-white hover:bg-green-600"
                             >
                                 Verify (+1)
                             </button>
                             <button 
-                                onClick={() => handleAction(alert.timestamp, 'dismiss')}
+                                onClick={() => handleAction(alert.timestamp, alert.source, 'dismiss', alert.filename)}
                                 className="flex-1 rounded border border-stroke py-2 text-sm font-medium text-dark hover:bg-gray-50 dark:border-dark-4 dark:text-white dark:hover:bg-dark-3"
                             >
                                 Dismiss

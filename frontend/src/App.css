@@ -1,8 +1,0 @@
-/* Custom styles for the HifazatAI application */
-
-/* Remove default margins and paddings that might interfere with Tailwind */
-#root {
-  height: 100vh;
-  margin: 0;
-  padding: 0;
-}

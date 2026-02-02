@@ -189,7 +189,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Defense System v3 Brain is Active"}
+    return {"message": "Hifazat AI Brain is Active"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

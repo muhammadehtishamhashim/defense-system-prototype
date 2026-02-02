@@ -1,27 +1,14 @@
-import darkLogo from "@/assets/logos/dark.svg";
-import logo from "@/assets/logos/main.svg";
-import Image from "next/image";
+import { Shield } from "lucide-react";
 
 export function Logo() {
   return (
-    <div className="relative h-8 max-w-[10.847rem]">
-      <Image
-        src={logo}
-        fill
-        className="dark:hidden"
-        alt="Hifazat AI logo"
-        role="presentation"
-        quality={100}
-      />
-
-      <Image
-        src={darkLogo}
-        fill
-        className="hidden dark:block"
-        alt="Hifazat AI logo"
-        role="presentation"
-        quality={100}
-      />
+    <div className="flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-white/5 dark:text-white">
+        <Shield className="h-6 w-6" />
+      </div>
+      <span className="text-xl font-bold text-dark dark:text-white text-nowrap">
+        Hifazat AI
+      </span>
     </div>
   );
 }

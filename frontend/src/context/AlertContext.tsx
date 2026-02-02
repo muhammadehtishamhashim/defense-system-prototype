@@ -33,7 +33,7 @@ export const AlertProvider = ({ children }: { children: ReactNode }) => {
 
       ws.onopen = () => {
         setIsConnected(true);
-        console.log("Connected to Defense System Brain");
+        console.log("Connected to Hifazat AI Brain");
       };
 
       ws.onmessage = (event) => {

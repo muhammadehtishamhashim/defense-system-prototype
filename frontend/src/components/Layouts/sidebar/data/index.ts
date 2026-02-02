@@ -2,7 +2,7 @@ import * as Icons from "../icons";
 
 export const NAV_DATA = [
   {
-    label: "DEFENSE SYSTEM V3",
+    label: "HIFAZAT AI",
     items: [
       {
         title: "Command Center",

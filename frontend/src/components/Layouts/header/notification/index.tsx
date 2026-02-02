@@ -61,7 +61,7 @@ export function Notification() {
           )}
         </div>
 
-        <ul className="mb-3 max-h-[23rem] space-y-1.5 overflow-y-auto custom-scrollbar">
+        <ul className="mb-3 max-h-92 space-y-1.5 overflow-y-auto custom-scrollbar">
             {alerts.length === 0 ? (
                 <li className="px-2 py-4 text-center text-sm text-dark-5 dark:text-dark-6">
                     No active threats detected.

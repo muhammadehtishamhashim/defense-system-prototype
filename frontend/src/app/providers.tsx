@@ -2,11 +2,14 @@
 
 import { SidebarProvider } from "@/components/Layouts/sidebar/sidebar-context";
 import { ThemeProvider } from "next-themes";
+import { AlertProvider } from "@/context/AlertContext";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider defaultTheme="light" attribute="class">
-      <SidebarProvider>{children}</SidebarProvider>
+    <ThemeProvider defaultTheme="dark" attribute="class">
+      <AlertProvider>
+        <SidebarProvider>{children}</SidebarProvider>
+      </AlertProvider>
     </ThemeProvider>
   );
 }

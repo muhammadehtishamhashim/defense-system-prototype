@@ -3,7 +3,7 @@ import defaultTheme from "tailwindcss/defaultTheme";
 
 const config: Config = {
   content: ["./src/**/*.{js,jsx,tsx}"],
-  darkMode: ["class"],
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
@@ -93,6 +93,19 @@ const config: Config = {
             DEFAULT: "#FCD34D",
             4: "#FFFBEB",
           },
+        },
+        // Cyber Theme Colors
+        "cyber-green": {
+            DEFAULT: "#00FF41",
+            dim: "rgba(0, 255, 65, 0.1)",
+        },
+        "cyber-red": {
+            DEFAULT: "#FF003C",
+            dim: "rgba(255, 0, 60, 0.1)",
+        },
+        glass: {
+            DEFAULT: "rgba(17, 25, 40, 0.75)",
+            border: "rgba(255, 255, 255, 0.125)",
         },
       },
       fontSize: {

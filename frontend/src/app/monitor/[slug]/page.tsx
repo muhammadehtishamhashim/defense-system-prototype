@@ -1,4 +1,5 @@
 import { VideoPlayer } from "@/components/Monitoring/VideoPlayer";
+import { MonitorControls } from "@/components/Monitoring/MonitorControls";
 
 export default async function MonitorPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -13,13 +14,7 @@ export default async function MonitorPage({ params }: { params: Promise<{ slug: 
             <h2 className="text-2xl font-bold text-dark dark:text-white capitalize">
                 {slug} Monitoring
             </h2>
-            <div className="flex items-center gap-2">
-                 <span className="flex h-3 w-3 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-                <span className="text-sm font-medium text-green-500">System Online</span>
-            </div>
+            <MonitorControls source={slug} />
         </div>
 
         {isValid ? (

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Dict, List
 from pydantic import BaseModel
@@ -55,6 +56,13 @@ VIDEO_PATHS = {
 # Throttling snapshots (Debounce logic)
 last_alert_time = {}
 
+# State to control which models are running inference
+active_monitors: Dict[str, bool] = {
+    "threat": False,
+    "theft": False,
+    "border": False
+}
+
 # Background Detection Tasks
 async def detection_loop(source: str, model_id: str):
     print(f"Starting detection loop for {source} with model {model_id}")
@@ -65,20 +73,29 @@ async def detection_loop(source: str, model_id: str):
 
     engine = DetectionEngine(source_path=video_path, model_id=model_id)
     
-    async for frame_bytes, count in engine.run():
-        # Update global state (video feed)
+    # Engine yields: frame_bytes, count, confidence
+    async for frame_bytes, count, confidence in engine.run():
+        # Always update video feed even if inference is "off" (engine currently runs inference every stride)
+        # TODO: Ideally engine should support pausing inference. 
+        # For now, we just don't process the alert if monitor is off.
         latest_frames[source] = frame_bytes
+
+        if not active_monitors.get(source, False):
+            continue
 
         # Strict Verification Workflow:
         # 1. Detection > 0.75 confidence (handled in engine)
         # 2. Debounce: Only 1 alert every 5 seconds per source
         
         if count > 0:
-            now = asyncio.get_event_loop().time()
+            now = time.time()
             # 5-second cooldown
             if now - last_alert_time.get(source, 0) > 5.0:
                 timestamp = int(now)
-                filename = f"{source}_{timestamp}.jpg"
+                # Filename: source_timestamp_confidence.jpg
+                # confidence is 0.0 to 1.0, we can save it as integer percent or float string
+                conf_str = f"{confidence:.2f}"
+                filename = f"{source}_{timestamp}_{conf_str}.jpg"
                 filepath = os.path.join("snapshots", filename)
                 
                 # Save snapshot
@@ -90,6 +107,7 @@ async def detection_loop(source: str, model_id: str):
                     "type": "alert",
                     "source": source,
                     "count": count,
+                    "confidence": confidence,
                     "timestamp": timestamp,
                     "snapshot": f"/snapshots/{filename}",
                     "status": "pending"
@@ -128,12 +146,25 @@ async def get_pending_snapshots():
             if f.endswith(".jpg"):
                 # Parse timestamp from filename: source_timestamp.jpg (e.g. theft_172345.jpg)
                 try:
-                    parts = f.rsplit("_", 1)
-                    source = parts[0]
-                    timestamp = int(parts[1].split(".")[0])
+                    # Expected: source_timestamp_confidence.jpg
+                    # But also handle old format: source_timestamp.jpg (confidence = 0)
+                    name_part = f.rsplit(".", 1)[0] # remove extension
+                    parts = name_part.split("_")
+                    
+                    if len(parts) >= 3:
+                        source = parts[0]
+                        timestamp = int(parts[1])
+                        confidence = float(parts[2])
+                    else:
+                        # Old format fallback
+                        source = parts[0]
+                        timestamp = int(parts[1])
+                        confidence = 0.0
+
                     files.append({
                         "source": source,
                         "timestamp": timestamp,
+                        "confidence": confidence,
                         "snapshot": f"/snapshots/{f}",
                         "filename": f 
                     })
@@ -205,6 +236,24 @@ async def websocket_endpoint(websocket: WebSocket):
 async def get_stats():
     # Return VERIFIED stats only
     return verified_stats
+
+@app.post("/control/{source}/{action}")
+async def control_monitor(source: str, action: str):
+    if source not in active_monitors:
+        return {"error": "Invalid source"}
+    
+    if action == "start":
+        active_monitors[source] = True
+    elif action == "stop":
+        active_monitors[source] = False
+    else:
+        return {"error": "Invalid action (start/stop)"}
+
+    return {"source": source, "active": active_monitors[source]}
+
+@app.get("/status")
+async def get_monitor_status():
+    return active_monitors
 
 # Endpoint to stream video
 def generate_mjpeg(source: str):

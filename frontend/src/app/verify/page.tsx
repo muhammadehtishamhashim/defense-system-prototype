@@ -84,7 +84,7 @@ export default function VerifyPage() {
                                 className="h-full w-full object-contain"
                             />
                             <div className="absolute top-2 right-2 rounded bg-black/60 px-2 py-1 text-xs font-bold text-white backdrop-blur">
-                                {((alert.count || 0) * 100).toFixed(0)}% Confidence
+                                {((alert.confidence || 0) * 100).toFixed(1)}% Confidence
                             </div>
                         </div>
 

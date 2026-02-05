@@ -28,7 +28,7 @@ class DetectionEngine:
 
     async def run(self):
         """
-        Async generator that yields (processed_frame_bytes, detection_count, detected_classes)
+        Async generator that yields (processed_frame_bytes, detection_count, max_confidence)
         """
         while True:
             cap = cv2.VideoCapture(self.source_path)
@@ -83,7 +83,16 @@ class DetectionEngine:
                 # Count detections
                 count = len(detections) if detections else 0
                 
-                yield frame_bytes, count
+                # Get max confidence
+                confidence = 0.0
+                if count > 0:
+                    try:
+                        # detections.confidence is a numpy array
+                        confidence = float(detections.confidence.max())
+                    except:
+                        confidence = 0.0
+                
+                yield frame_bytes, count, confidence
                 
                 frame_count += 1
                 

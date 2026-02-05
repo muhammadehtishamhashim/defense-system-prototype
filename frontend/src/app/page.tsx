@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -32,36 +33,60 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Chart Data Simulation (In a real app, this would come from history)
-  // We'll just show random movement or accumulation based on alerts
-  const [series, setSeries] = useState([
-    { name: "Threats", data: [0, 0, 0, 0, 0, 0, 0] },
-    { name: "Theft", data: [0, 0, 0, 0, 0, 0, 0] },
-  ]);
+  // Poll for stats and update graph
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/stats");
+        const data = await res.json();
+        setStats(data);
+      } catch (e) {
+        console.error("Failed to fetch stats");
+      }
+    };
+    
+    fetchStats();
+    const interval = setInterval(fetchStats, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   const options: ApexOptions = {
     chart: {
-      type: "area",
+      type: "bar",
       height: 350,
-      zoom: { enabled: false },
+      fontFamily: "Satoshi, sans-serif",
       toolbar: { show: false },
-      background: 'transparent'
+      background: 'transparent',
     },
-    colors: ["#FF003C", "#F97316"],
+    colors: ["#FF003C", "#F97316", "#3C50E0"],
+    plotOptions: {
+        bar: { 
+            borderRadius: 4,
+            columnWidth: "45%",
+            distributed: true,
+        }
+    },
     dataLabels: { enabled: false },
-    stroke: { curve: "smooth", width: 2 },
+    legend: { show: false }, // Legend redundant with distributed bars and x-axis labels
+    grid: { show: true, borderColor: "#333", strokeDashArray: 0 },
     xaxis: {
-      categories: ["Time", "Time", "Time", "Time", "Time", "Time", "Now"],
+      categories: ["Threats", "Thefts", "Border Anomalies"],
       axisBorder: { show: false },
       axisTicks: { show: false },
-      labels: { style: { colors: "#9ca3af" } }
+      labels: { style: { colors: "#9ca3af", fontSize: "14px" } },
     },
     yaxis: {
-      labels: { style: { colors: "#9ca3af" } }
+        labels: { style: { colors: "#9ca3af" } }
     },
-    grid: { show: true, borderColor: "#374151" },
-    theme: { mode: 'dark' }
+    tooltip: { theme: 'dark' }
   };
+  
+  const series = [
+      { 
+          name: "Total Events", 
+          data: [stats.threats, stats.thefts, stats.border_anomalies] 
+      },
+  ];
 
   return (
     <>
@@ -75,9 +100,9 @@ export default function Home() {
         
         {/* Activity Graph */}
         <div className="col-span-12 rounded-[10px] border border-stroke bg-white px-5 pb-5 pt-7.5 shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card xl:col-span-8">
-            <h4 className="mb-2 text-xl font-bold text-dark dark:text-white">Detection Frequency</h4>
+            <h4 className="mb-2 text-xl font-bold text-dark dark:text-white">Event Distribution</h4>
             <div id="chartOne" className="-ml-5 h-[355px] w-[105%]">
-              <ReactApexChart options={options} series={series} type="area" height={350} />
+              <ReactApexChart options={options} series={series} type="bar" height={350} />
             </div>
         </div>
 
